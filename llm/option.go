@@ -37,6 +37,7 @@ type GenerateOptions struct {
 	MCPPrompt      string      `json:"-"` // 在文本模式下使用的提示
 	MCPAutoExecute bool        `json:"-"` // 是否自动执行MCP工具调用
 	MCPTaskTag     string      `json:"-"` // MCP任务标签，默认为 MCP_HOST_TASK
+	MCPResultTag   string      `json:"-"` // MCP结果标签，默认为 MCP_HOST_RESULT
 
 	StateNotifyFunc StateNotifyFunc `json:"-"` // 状态通知回调
 }
@@ -74,10 +75,11 @@ const (
 	FunctionCallBehaviorNone FunctionCallBehavior = "none"
 	// FunctionCallBehaviorAuto会自动调用函数
 	FunctionCallBehaviorAuto FunctionCallBehavior = "auto"
-	// 默认的MCP任务标签
-	MCP_DEFAULT_TASK_TAG = "MCP_HOST_TASK"
-	// 默认的MCP结果标签
-	MCP_DEFAULT_RESULT_TAG = "MCP_HOST_RESULT"
+)
+
+const (
+	MCP_DEFAULT_TASK_TAG   = "MCP_HOST_TASK"   // 默认任务标签
+	MCP_DEFAULT_RESULT_TAG = "MCP_HOST_RESULT" // 默认结果标签
 )
 
 // WithModel 指定要使用的模型名称
@@ -164,6 +166,13 @@ func WithMCPTaskTag(tag string) GenerateOption {
 	}
 }
 
+// WithMCPResultTag 指定MCP结果的标签 (新增函数)
+func WithMCPResultTag(tag string) GenerateOption {
+	return func(o *GenerateOptions) {
+		o.MCPResultTag = tag
+	}
+}
+
 // WithParallelToolCalls 通知回调
 func WithStateNotifyFunc(notifyFunc StateNotifyFunc) GenerateOption {
 	return func(o *GenerateOptions) {
@@ -177,8 +186,9 @@ func DefaultGenerateOption() *GenerateOptions {
 		ParallelToolCalls: nil,
 		MCPWorkMode:       TextMode,
 		MCPPrompt:         defaultMCPPrompt,
-		MCPAutoExecute:    false,           // 默认不自动执行
-		MCPTaskTag:        "MCP_HOST_TASK", // 默认任务标签
+		MCPAutoExecute:    false, // 默认不自动执行
+		MCPTaskTag:        MCP_DEFAULT_TASK_TAG,
+		MCPResultTag:      MCP_DEFAULT_RESULT_TAG,
 	}
 }
 

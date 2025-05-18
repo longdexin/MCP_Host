@@ -45,9 +45,11 @@ type Generation struct {
 	LogProbs         *openai.ChatCompletionStreamChoiceLogprobs `json:"logprobs,omitempty"`
 
 	// MCP相关信息
-	MCPWorkMode LLMWorkMode `json:"-"` // 工作模式
-	MCPTaskTag  string      `json:"-"`
-	MCPPrompt   string
+	// MCP相关信息
+	MCPWorkMode  LLMWorkMode `json:"-"` // 工作模式
+	MCPTaskTag   string      `json:"-"` // 任务标签
+	MCPResultTag string      `json:"-"` // 结果标签
+	MCPPrompt    string      `json:"-"` // 提示
 }
 
 // Usage表示令牌使用情况

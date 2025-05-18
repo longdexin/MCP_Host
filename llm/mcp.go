@@ -78,6 +78,7 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 		// 存储MCP相关信息，以便在后续处理中使用
 		gen.MCPWorkMode = opts.MCPWorkMode
 		gen.MCPTaskTag = opts.MCPTaskTag
+		gen.MCPResultTag = opts.MCPResultTag
 		gen.MCPPrompt = mcpPrompt
 
 		// 如果启用了自动执行并存在工具调用，则处理工具调用并生成最终回复
@@ -169,6 +170,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		// 存储MCP相关信息
 		gen.MCPWorkMode = opts.MCPWorkMode
 		gen.MCPTaskTag = opts.MCPTaskTag
+		gen.MCPResultTag = opts.MCPResultTag
 		gen.MCPPrompt = mcpPrompt
 
 		if opts.MCPAutoExecute {
@@ -201,8 +203,16 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 }
 
 // processMCPTasksWithResults 解析并执行任务，返回结果列表
-func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, gen *Generation, taskTag string) ([]TaskResult, error) {
-	tasks, err := c.ExtractMCPTasks(gen.Content, taskTag)
+func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, gen *Generation, taskTag ...string) ([]TaskResult, error) {
+	tag := MCP_DEFAULT_TASK_TAG
+	if len(taskTag) > 0 && taskTag[0] != "" {
+		tag = taskTag[0]
+	}
+	if gen.MCPTaskTag != "" {
+		tag = gen.MCPTaskTag
+	}
+
+	tasks, err := c.ExtractMCPTasks(gen.Content, tag)
 	if err != nil {
 		return nil, err
 	}
@@ -233,9 +243,14 @@ func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, gen *Generat
 }
 
 // ExecuteMCPTasksWithResults 执行文本中提取的MCP任务并返回结果列表
-func (c *MCPClient) ExecuteMCPTasksWithResults(ctx context.Context, content string, taskTag string) ([]TaskResult, error) {
+func (c *MCPClient) ExecuteMCPTasksWithResults(ctx context.Context, content string, taskTag ...string) ([]TaskResult, error) {
+	tag := MCP_DEFAULT_TASK_TAG
+	if len(taskTag) > 0 && taskTag[0] != "" {
+		tag = taskTag[0]
+	}
+
 	// 提取MCP任务
-	tasks, err := c.ExtractMCPTasks(content, taskTag)
+	tasks, err := c.ExtractMCPTasks(content, tag)
 	if err != nil {
 		return nil, err
 	}
@@ -266,9 +281,14 @@ func (c *MCPClient) ExecuteMCPTasksWithResults(ctx context.Context, content stri
 }
 
 // ExecuteMCPTasks 执行文本中提取的MCP任务 (保留以兼容现有代码)
-func (c *MCPClient) ExecuteMCPTasks(ctx context.Context, content string, taskTag string) (string, error) {
+func (c *MCPClient) ExecuteMCPTasks(ctx context.Context, content string, taskTag ...string) (string, error) {
+	tag := MCP_DEFAULT_TASK_TAG
+	if len(taskTag) > 0 && taskTag[0] != "" {
+		tag = taskTag[0]
+	}
+
 	// 提取MCP任务
-	tasks, err := c.ExtractMCPTasks(content, taskTag)
+	tasks, err := c.ExtractMCPTasks(content, tag)
 	if err != nil {
 		return content, err
 	}
@@ -284,8 +304,8 @@ func (c *MCPClient) ExecuteMCPTasks(ctx context.Context, content string, taskTag
 		if err != nil {
 			updatedContent = strings.Replace(
 				updatedContent,
-				fmt.Sprintf("<%s>\n%s\n</%s>", taskTag, taskToString(task), taskTag),
-				fmt.Sprintf("<%s>\n%s\n[ERROR] %v\n</%s>", taskTag, taskToString(task), err, taskTag),
+				fmt.Sprintf("<%s>\n%s\n</%s>", tag, taskToString(task), tag),
+				fmt.Sprintf("<%s>\n%s\n[ERROR] %v\n</%s>", tag, taskToString(task), err, tag),
 				1,
 			)
 			continue
@@ -294,8 +314,8 @@ func (c *MCPClient) ExecuteMCPTasks(ctx context.Context, content string, taskTag
 		resultStr, _ := json.Marshal(result.Content)
 		updatedContent = strings.Replace(
 			updatedContent,
-			fmt.Sprintf("<%s>\n%s\n</%s>", taskTag, taskToString(task), taskTag),
-			fmt.Sprintf("<%s>\n%s\n[RESULT] %s\n</%s>", taskTag, taskToString(task), string(resultStr), taskTag),
+			fmt.Sprintf("<%s>\n%s\n</%s>", tag, taskToString(task), tag),
+			fmt.Sprintf("<%s>\n%s\n[RESULT] %s\n</%s>", tag, taskToString(task), string(resultStr), tag),
 			1,
 		)
 	}
@@ -337,8 +357,12 @@ func (c *MCPClient) appendToolCallsToContent(gen *Generation, taskTag string) {
 }
 
 // ExtractMCPTasks 从文本中提取MCP任务
-func (c *MCPClient) ExtractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
-	return extractMCPTasks(content, taskTag)
+func (c *MCPClient) ExtractMCPTasks(content string, taskTag ...string) ([]MCPTask, error) {
+	tag := MCP_DEFAULT_TASK_TAG
+	if len(taskTag) > 0 && taskTag[0] != "" {
+		tag = taskTag[0]
+	}
+	return extractMCPTasks(content, tag)
 }
 
 // ExecuteToolCalls 执行工具调用并返回更新后的生成结果
@@ -614,7 +638,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 				}
 
 				var resultOutput strings.Builder
-				resultOutput.WriteString(fmt.Sprintf("<%s>\n", MCP_DEFAULT_RESULT_TAG))
+				resultOutput.WriteString(fmt.Sprintf("<%s>\n", opts.MCPResultTag))
 
 				if result.Error != "" {
 					resultOutput.WriteString(fmt.Sprintf("错误执行任务 %s.%s: %s\n",
@@ -625,7 +649,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 					resultOutput.WriteString("\n")
 				}
 
-				resultOutput.WriteString(fmt.Sprintf("</%s>\n", MCP_DEFAULT_RESULT_TAG))
+				resultOutput.WriteString(fmt.Sprintf("</%s>\n", opts.MCPResultTag))
 
 				if stateNotify != nil {
 					state := MCPExecutionState{
@@ -670,7 +694,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 			_ = streamingFunc(ctx, []byte("\n"))
 
 			resultOutput := strings.Builder{}
-			resultOutput.WriteString(fmt.Sprintf("<%s>\n", MCP_DEFAULT_RESULT_TAG))
+			resultOutput.WriteString(fmt.Sprintf("<%s>\n", opts.MCPResultTag))
 
 			for _, call := range gen.ToolCalls {
 				serverID := ""
@@ -723,7 +747,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 				}
 			}
 
-			resultOutput.WriteString(fmt.Sprintf("</%s>\n", MCP_DEFAULT_RESULT_TAG))
+			resultOutput.WriteString(fmt.Sprintf("</%s>\n", opts.MCPResultTag))
 			_ = streamingFunc(ctx, []byte(resultOutput.String()))
 			_ = streamingFunc(ctx, []byte("——————\n"))
 		}
@@ -836,6 +860,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 	// 保留原始调用的相关信息
 	finalGen.MCPWorkMode = gen.MCPWorkMode
 	finalGen.MCPTaskTag = gen.MCPTaskTag
+	finalGen.MCPResultTag = gen.MCPResultTag
 	finalGen.MCPPrompt = gen.MCPPrompt
 
 	// 合并信息

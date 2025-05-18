@@ -69,13 +69,13 @@ func main() {
 	}
 
 	fmt.Println("\n--- 手动执行工具调用 ---")
-	tasks, err := mcpClient.ExtractMCPTasks(textResult.Content, llm.MCP_DEFAULT_TASK_TAG)
+	tasks, err := mcpClient.ExtractMCPTasks(textResult.Content)
 	if err != nil {
 		log.Printf("提取任务失败: %v", err)
 	} else if len(tasks) > 0 {
 		fmt.Printf("发现 %d 个工具调用\n", len(tasks))
 
-		taskResults, err := mcpClient.ExecuteMCPTasksWithResults(ctx, textResult.Content, llm.MCP_DEFAULT_TASK_TAG)
+		taskResults, err := mcpClient.ExecuteMCPTasksWithResults(ctx, textResult.Content)
 		if err != nil {
 			log.Printf("执行工具调用失败: %v", err)
 		} else {
