@@ -26,23 +26,44 @@ type TaskResult struct {
 
 // MCPClient MCP的LLM客户端包装
 type MCPClient struct {
-	llm    LLM               // 底层LLM客户端
-	host   *MCP_Host.MCPHost // MCP主机
-	prompt string            // 默认提示
+	llm                      LLM               // 底层LLM客户端
+	host                     *MCP_Host.MCPHost // MCP主机
+	prompt                   string            // 默认提示
+	toolErrorMsgTemplate     string            // 工具错误消息模板
+	toolResultMsgTemplate    string            // 工具结果消息模板
+	functionCallSystemPrompt string            // 函数调用模式的系统提示
 }
 
 // NewMCPClient 创建一个新的MCPClient
 func NewMCPClient(llm LLM, host *MCP_Host.MCPHost) *MCPClient {
 	return &MCPClient{
-		llm:    llm,
-		host:   host,
-		prompt: defaultMCPPrompt,
+		llm:                      llm,
+		host:                     host,
+		prompt:                   defaultMCPPrompt,
+		toolErrorMsgTemplate:     defaultToolErrorMessageTemplate,
+		toolResultMsgTemplate:    defaultToolResultMessageTemplate,
+		functionCallSystemPrompt: defaultFunctionCallSystemPrompt,
 	}
 }
 
 // SetPrompt 设置默认提示
 func (c *MCPClient) SetPrompt(prompt string) {
 	c.prompt = prompt
+}
+
+// SetToolErrorMessageTemplate 设置工具错误消息模板
+func (c *MCPClient) SetToolErrorMessageTemplate(template string) {
+	c.toolErrorMsgTemplate = template
+}
+
+// SetToolResultMessageTemplate 设置工具结果消息模板
+func (c *MCPClient) SetToolResultMessageTemplate(template string) {
+	c.toolResultMsgTemplate = template
+}
+
+// SetFunctionCallSystemPrompt 设置函数调用模式的系统提示
+func (c *MCPClient) SetFunctionCallSystemPrompt(prompt string) {
+	c.functionCallSystemPrompt = prompt
 }
 
 // Generate 生成回复并处理MCP任务
@@ -465,12 +486,12 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string) st
 		return ""
 	}
 
-	builder.WriteString("要使用工具，请使用以下格式:\n")
+	builder.WriteString("Want to use a tool? Please use the following format:\n")
 	builder.WriteString(fmt.Sprintf("<%s>\n", taskTag))
 	builder.WriteString("{\n")
-	builder.WriteString("  \"server\": \"服务器ID\",\n")
-	builder.WriteString("  \"tool\": \"工具名称\",\n")
-	builder.WriteString("  \"args\": {\"参数名\": 参数值, ...}\n")
+	builder.WriteString("  \"server\": \"Server ID\",\n")
+	builder.WriteString("  \"tool\": \"Tool Name\",\n")
+	builder.WriteString("  \"args\": {\"arg1\": \"value1\",\n")
 	builder.WriteString("}\n")
 	builder.WriteString(fmt.Sprintf("</%s>\n", taskTag))
 
@@ -776,18 +797,18 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		for _, result := range taskResults {
 			var toolMsg string
 			if result.Error != "" {
-				toolMsg = fmt.Sprintf("工具执行错误: %s.%s\n错误: %s",
+				toolMsg = fmt.Sprintf(c.toolErrorMsgTemplate,
 					result.Task.Server, result.Task.Tool, result.Error)
 			} else {
 				resultJSON, _ := json.Marshal(result.Result)
-				toolMsg = fmt.Sprintf("我已经使用工具 %s.%s 获取到以下信息:\n%s",
+				toolMsg = fmt.Sprintf(c.toolResultMsgTemplate,
 					result.Task.Server, result.Task.Tool, string(resultJSON))
 			}
 
 			messages = append(messages, *NewUserMessage("", toolMsg))
 		}
 	} else {
-		systemMsg := NewSystemMessage("", "你是一个AI助手，可以使用工具帮助用户解决问题。请基于工具调用的结果，给出完整的回复。")
+		systemMsg := NewSystemMessage("", c.functionCallSystemPrompt)
 		messages = append(messages, *systemMsg)
 		messages = append(messages, *NewUserMessage("", prompt))
 		assistantMsg := NewAssistantMessage("", "", gen.ToolCalls)
@@ -796,7 +817,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		for _, call := range gen.ToolCalls {
 			var resultContent string
 			if errStr, ok := gen.GenerationInfo["tool_error_"+call.ID].(string); ok && errStr != "" {
-				resultContent = fmt.Sprintf("错误: %s", errStr)
+				resultContent = fmt.Sprintf("Error: %s", errStr)
 			} else if result, ok := gen.GenerationInfo["tool_result_"+call.ID]; ok {
 				resultJSON, _ := json.Marshal(result)
 				resultContent = string(resultJSON)

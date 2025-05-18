@@ -6,7 +6,6 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-// LLM表示一个大语言模型客户端
 type LLM interface {
 	// Generate生成文本回复
 	Generate(ctx context.Context, prompt string, options ...GenerateOption) (*Generation, error)
@@ -14,7 +13,6 @@ type LLM interface {
 	GenerateContent(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error)
 }
 
-// Message表示对话中的一条消息
 type Message struct {
 	Role       MessageRole `json:"role"`
 	Name       string      `json:"name,omitempty"`
@@ -23,7 +21,6 @@ type Message struct {
 	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
 }
 
-// MessageRole表示消息的角色类型
 type MessageRole string
 
 const (
@@ -33,7 +30,6 @@ const (
 	RoleTool      MessageRole = "tool"
 )
 
-// Generation表示LLM的生成结果
 type Generation struct {
 	Role             string                                     `json:"role"`
 	Content          string                                     `json:"content"`
@@ -52,27 +48,27 @@ type Generation struct {
 	MCPPrompt    string      `json:"-"` // 提示
 }
 
-// Usage表示令牌使用情况
+// Usage 令牌使用情况
 type Usage struct {
 	CompletionTokens int `json:"completion_tokens,omitempty"`
 	PromptTokens     int `json:"prompt_tokens,omitempty"`
 	TotalTokens      int `json:"total_tokens,omitempty"`
 }
 
-// ToolCall表示模型调用工具的请求
+// ToolCall 模型调用工具的请求
 type ToolCall struct {
 	ID       string        `json:"id,omitempty"`
 	Type     string        `json:"type,omitempty"`
 	Function *FunctionCall `json:"function,omitempty"`
 }
 
-// FunctionCall表示函数调用
+// FunctionCall 函数调用
 type FunctionCall struct {
 	Name      string `json:"name,omitempty"`
 	Arguments string `json:"arguments,omitempty"`
 }
 
-// LLMWorkMode表示LLM的工作模式
+// LLMWorkMode LLM的工作模式
 type LLMWorkMode string
 
 const (

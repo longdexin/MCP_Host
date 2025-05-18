@@ -13,7 +13,7 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// ServerConnection 表示到单个MCP服务器的连接
+// ServerConnection  到单个MCP服务器的连接
 type ServerConnection struct {
 	Client       *client.Client
 	ServerID     string

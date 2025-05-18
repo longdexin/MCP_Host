@@ -42,7 +42,7 @@ type GenerateOptions struct {
 	StateNotifyFunc StateNotifyFunc `json:"-"` // 状态通知回调
 }
 
-// Tool表示模型可以使用的工具
+// Tool 模型可以使用的工具
 type Tool struct {
 	Type     string              `json:"type"`               // 工具类型
 	Function *FunctionDefinition `json:"function,omitempty"` // 函数定义
@@ -166,7 +166,7 @@ func WithMCPTaskTag(tag string) GenerateOption {
 	}
 }
 
-// WithMCPResultTag 指定MCP结果的标签 (新增函数)
+// WithMCPResultTag 指定MCP结果的标签
 func WithMCPResultTag(tag string) GenerateOption {
 	return func(o *GenerateOptions) {
 		o.MCPResultTag = tag
@@ -192,7 +192,7 @@ func DefaultGenerateOption() *GenerateOptions {
 	}
 }
 
-// MCPExecutionState 表示MCP执行状态
+// MCPExecutionState  MCP执行状态
 type MCPExecutionState struct {
 	Type     string // "tool_call", "tool_result", "llm_response"等
 	ServerID string // 服务器ID（如果是工具调用）
