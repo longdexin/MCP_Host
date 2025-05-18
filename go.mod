@@ -2,7 +2,10 @@ module github.com/TIANLI0/MCP_Host
 
 go 1.24.0
 
-require github.com/mark3labs/mcp-go v0.28.0
+require (
+	github.com/mark3labs/mcp-go v0.28.0
+	github.com/sashabaranov/go-openai v1.40.0
+)
 
 require (
 	github.com/google/uuid v1.6.0 // indirect
