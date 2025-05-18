@@ -37,6 +37,8 @@ type GenerateOptions struct {
 	MCPPrompt      string      `json:"-"` // 在文本模式下使用的提示
 	MCPAutoExecute bool        `json:"-"` // 是否自动执行MCP工具调用
 	MCPTaskTag     string      `json:"-"` // MCP任务标签，默认为 MCP_HOST_TASK
+
+	StateNotifyFunc StateNotifyFunc `json:"-"` // 状态通知回调
 }
 
 // Tool表示模型可以使用的工具
@@ -162,6 +164,13 @@ func WithMCPTaskTag(tag string) GenerateOption {
 	}
 }
 
+// WithParallelToolCalls 通知回调
+func WithStateNotifyFunc(notifyFunc StateNotifyFunc) GenerateOption {
+	return func(o *GenerateOptions) {
+		o.StateNotifyFunc = notifyFunc
+	}
+}
+
 // DefaultGenerateOption返回默认的生成选项
 func DefaultGenerateOption() *GenerateOptions {
 	return &GenerateOptions{
@@ -172,3 +181,14 @@ func DefaultGenerateOption() *GenerateOptions {
 		MCPTaskTag:        "MCP_HOST_TASK", // 默认任务标签
 	}
 }
+
+// MCPExecutionState 表示MCP执行状态
+type MCPExecutionState struct {
+	Type     string // "tool_call", "tool_result", "llm_response"等
+	ServerID string // 服务器ID（如果是工具调用）
+	ToolName string // 工具名称（如果是工具调用）
+	Stage    string // "start", "complete"等
+	Data     any    // 与状态相关的数据
+}
+
+type StateNotifyFunc func(ctx context.Context, state MCPExecutionState) error

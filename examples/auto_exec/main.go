@@ -10,6 +10,7 @@ import (
 	"github.com/TIANLI0/MCP_Host/llm"
 )
 
+// 示例配置，实际不可用
 const (
 	MCP_API_Secret  = "A-AQ3CIGBABPJCIO1UULUQ799CJ03J7VXP"
 	OPENAI_API_KEY  = "sk-YV2H91JEFC0FTICEISPIE6HU6XRUASW0"
@@ -20,6 +21,21 @@ const (
 // 流式输出回调函数
 func streamHandler(ctx context.Context, chunk []byte) error {
 	fmt.Print(string(chunk))
+	return nil
+}
+
+// 状态通知回调函数
+func stateNotifyHandler(ctx context.Context, state llm.MCPExecutionState) error {
+	switch state.Type {
+	case "tool_call":
+		fmt.Printf("\n[开始调用工具: %s.%s]\n", state.ServerID, state.ToolName)
+	case "tool_result":
+		fmt.Printf("\n[工具执行结果: %s.%s.%s]\n", state.ServerID, state.ToolName, state.Data)
+	case "generating_response":
+		fmt.Printf("\n[生成AI回复...]\n")
+	case "process_complete":
+		fmt.Printf("\n[处理完成]\n")
+	}
 	return nil
 }
 
@@ -59,6 +75,7 @@ func main() {
 		llm.WithMCPWorkMode(llm.TextMode),
 		llm.WithStreamingFunc(streamHandler),
 		llm.WithMCPAutoExecute(true),
+		llm.WithStateNotifyFunc(stateNotifyHandler),
 		llm.WithTemperature(0.7),
 	)
 	if err != nil {

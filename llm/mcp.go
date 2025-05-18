@@ -560,14 +560,39 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		opt(opts)
 	}
 
+	stateNotify := opts.StateNotifyFunc
+
+	if stateNotify != nil {
+		_ = stateNotify(ctx, MCPExecutionState{
+			Type:  "process_start",
+			Stage: "start",
+			Data:  map[string]any{"mode": gen.MCPWorkMode},
+		})
+	}
+
 	streamingFunc := opts.StreamingFunc
 	var taskResults []TaskResult
 
 	if gen.MCPWorkMode == TextMode {
 		var err error
+		if stateNotify != nil {
+			_ = stateNotify(ctx, MCPExecutionState{
+				Type:  "extracting_tasks",
+				Stage: "start",
+			})
+		}
+
 		taskResults, err = c.processMCPTasksWithResults(ctx, gen, gen.MCPTaskTag)
 		if err != nil {
 			return nil, err
+		}
+
+		if stateNotify != nil {
+			_ = stateNotify(ctx, MCPExecutionState{
+				Type:  "extracting_tasks",
+				Stage: "complete",
+				Data:  map[string]any{"task_count": len(taskResults)},
+			})
 		}
 
 		if len(taskResults) == 0 {
@@ -578,6 +603,16 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 			_ = streamingFunc(ctx, []byte("\n"))
 
 			for _, result := range taskResults {
+				if stateNotify != nil {
+					_ = stateNotify(ctx, MCPExecutionState{
+						Type:     "tool_call",
+						ServerID: result.Task.Server,
+						ToolName: result.Task.Tool,
+						Stage:    "start",
+						Data:     result.Task.Args,
+					})
+				}
+
 				var resultOutput strings.Builder
 				resultOutput.WriteString(fmt.Sprintf("<%s>\n", MCP_DEFAULT_RESULT_TAG))
 
@@ -592,17 +627,45 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 
 				resultOutput.WriteString(fmt.Sprintf("</%s>\n", MCP_DEFAULT_RESULT_TAG))
 
+				if stateNotify != nil {
+					state := MCPExecutionState{
+						Type:     "tool_result",
+						ServerID: result.Task.Server,
+						ToolName: result.Task.Tool,
+						Stage:    "complete",
+					}
+					if result.Error != "" {
+						state.Data = map[string]any{"error": result.Error}
+					} else {
+						state.Data = result.Result
+					}
+					_ = stateNotify(ctx, state)
+				}
 				_ = streamingFunc(ctx, []byte(resultOutput.String()))
 			}
 
 			_ = streamingFunc(ctx, []byte("——————\n"))
 		}
 	} else {
+		if stateNotify != nil {
+			_ = stateNotify(ctx, MCPExecutionState{
+				Type:  "processing_tool_calls",
+				Stage: "start",
+				Data:  map[string]any{"call_count": len(gen.ToolCalls)},
+			})
+		}
+
 		if err := c.processToolCalls(ctx, gen); err != nil {
 			return nil, err
 		}
 
-		// 函数调用模式
+		if stateNotify != nil {
+			_ = stateNotify(ctx, MCPExecutionState{
+				Type:  "processing_tool_calls",
+				Stage: "complete",
+			})
+		}
+
 		if streamingFunc != nil && len(gen.ToolCalls) > 0 {
 			_ = streamingFunc(ctx, []byte("\n"))
 
@@ -610,12 +673,53 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 			resultOutput.WriteString(fmt.Sprintf("<%s>\n", MCP_DEFAULT_RESULT_TAG))
 
 			for _, call := range gen.ToolCalls {
+				serverID := ""
+				toolName := ""
+				parts := strings.Split(call.Function.Name, ".")
+				if len(parts) == 2 {
+					serverID = parts[0]
+					toolName = parts[1]
+				} else {
+					serverID = "unknown"
+					toolName = call.Function.Name
+				}
+
+				if stateNotify != nil {
+					_ = stateNotify(ctx, MCPExecutionState{
+						Type:     "tool_call",
+						ServerID: serverID,
+						ToolName: toolName,
+						Stage:    "start",
+						Data:     map[string]any{"call_id": call.ID},
+					})
+				}
+
 				if errStr, ok := gen.GenerationInfo["tool_error_"+call.ID].(string); ok && errStr != "" {
 					resultOutput.WriteString(fmt.Sprintf("错误执行工具 %s: %s\n", call.Function.Name, errStr))
+
+					if stateNotify != nil {
+						_ = stateNotify(ctx, MCPExecutionState{
+							Type:     "tool_result",
+							ServerID: serverID,
+							ToolName: toolName,
+							Stage:    "complete",
+							Data:     map[string]any{"error": errStr, "call_id": call.ID},
+						})
+					}
 				} else if result, ok := gen.GenerationInfo["tool_result_"+call.ID]; ok {
 					resultJSON, _ := json.Marshal(result)
 					resultOutput.WriteString(string(resultJSON))
 					resultOutput.WriteString("\n")
+
+					if stateNotify != nil {
+						_ = stateNotify(ctx, MCPExecutionState{
+							Type:     "tool_result",
+							ServerID: serverID,
+							ToolName: toolName,
+							Stage:    "complete",
+							Data:     map[string]any{"result": result, "call_id": call.ID},
+						})
+					}
 				}
 			}
 
@@ -628,6 +732,14 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 	var secondStreamingFunc func(ctx context.Context, chunk []byte) error
 	if streamingFunc != nil {
 		secondStreamingFunc = streamingFunc
+	}
+
+	// 通知开始构建消息上下文
+	if stateNotify != nil {
+		_ = stateNotify(ctx, MCPExecutionState{
+			Type:  "building_context",
+			Stage: "start",
+		})
 	}
 
 	var messages []Message
@@ -672,6 +784,15 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		}
 	}
 
+	// 通知消息上下文构建完成
+	if stateNotify != nil {
+		_ = stateNotify(ctx, MCPExecutionState{
+			Type:  "building_context",
+			Stage: "complete",
+			Data:  map[string]any{"message_count": len(messages)},
+		})
+	}
+
 	finalOptions := make([]GenerateOption, 0)
 	for _, opt := range options {
 		if !isAutoExecuteOption(opt) {
@@ -682,9 +803,34 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		finalOptions = append(finalOptions, WithStreamingFunc(secondStreamingFunc))
 	}
 
+	// 通知开始生成最终回复
+	if stateNotify != nil {
+		_ = stateNotify(ctx, MCPExecutionState{
+			Type:  "generating_response",
+			Stage: "start",
+		})
+	}
+
 	finalGen, err := c.llm.GenerateContent(ctx, messages, finalOptions...)
 	if err != nil {
+		// 通知生成响应失败
+		if stateNotify != nil {
+			_ = stateNotify(ctx, MCPExecutionState{
+				Type:  "generating_response",
+				Stage: "error",
+				Data:  map[string]any{"error": err.Error()},
+			})
+		}
 		return nil, err
+	}
+
+	// 通知生成响应成功
+	if stateNotify != nil {
+		_ = stateNotify(ctx, MCPExecutionState{
+			Type:  "generating_response",
+			Stage: "complete",
+			Data:  map[string]any{"content_length": len(finalGen.Content)},
+		})
 	}
 
 	// 保留原始调用的相关信息
@@ -704,6 +850,18 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 				finalGen.GenerationInfo[k] = v
 			}
 		}
+	}
+
+	// 通知整个处理过程完成
+	if stateNotify != nil {
+		_ = stateNotify(ctx, MCPExecutionState{
+			Type:  "process_complete",
+			Stage: "complete",
+			Data: map[string]any{
+				"has_results": len(taskResults) > 0 || len(gen.ToolCalls) > 0,
+				"mode":        gen.MCPWorkMode,
+			},
+		})
 	}
 
 	return finalGen, nil

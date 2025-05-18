@@ -12,6 +12,7 @@ import (
 	"github.com/TIANLI0/MCP_Host/llm"
 )
 
+// 示例配置，实际不可用
 const (
 	MCP_API_Secret  = "A-AQ3CIGBABPJCIO1UULUQ799CJ03J7VXP"
 	OPENAI_API_KEY  = "sk-YV2H91JEFC0FTICEISPIE6HU6XRUASW0"
