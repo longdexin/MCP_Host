@@ -33,11 +33,12 @@ type GenerateOptions struct {
 	TopLogProbs            int                                           `json:"top_logprobs,omitempty"`        // 返回每个位置最可能的令牌数量
 
 	// MCP相关选项
-	MCPWorkMode    LLMWorkMode `json:"-"` // LLM工作模式
-	MCPPrompt      string      `json:"-"` // 在文本模式下使用的提示
-	MCPAutoExecute bool        `json:"-"` // 是否自动执行MCP工具调用
-	MCPTaskTag     string      `json:"-"` // MCP任务标签，默认为 MCP_HOST_TASK
-	MCPResultTag   string      `json:"-"` // MCP结果标签，默认为 MCP_HOST_RESULT
+	MCPWorkMode      LLMWorkMode `json:"-"` // LLM工作模式
+	MCPPrompt        string      `json:"-"` // 在文本模式下使用的提示
+	MCPAutoExecute   bool        `json:"-"` // 是否自动执行MCP工具调用
+	MCPTaskTag       string      `json:"-"` // MCP任务标签，默认为 MCP_HOST_TASK
+	MCPResultTag     string      `json:"-"` // MCP结果标签，默认为 MCP_HOST_RESULT
+	MCPDisabledTools []string    `json:"-"` // 禁用的工具列表，格式为 "serverID.toolName"
 
 	StateNotifyFunc StateNotifyFunc `json:"-"` // 状态通知回调
 }
@@ -177,6 +178,13 @@ func WithMCPResultTag(tag string) GenerateOption {
 func WithStateNotifyFunc(notifyFunc StateNotifyFunc) GenerateOption {
 	return func(o *GenerateOptions) {
 		o.StateNotifyFunc = notifyFunc
+	}
+}
+
+// WithMCPDisabledTools 指定要禁用的MCP工具列表
+func WithMCPDisabledTools(disabledTools []string) GenerateOption {
+	return func(o *GenerateOptions) {
+		o.MCPDisabledTools = disabledTools
 	}
 }
 

@@ -71,16 +71,23 @@ func main() {
 
 	fmt.Println("--- 文本模式自动工具调用示例 ---")
 
-	_, err = mcpClient.Generate(ctx, "现在是几点？然后再来点灵感",
+	// 禁用工具列表
+	disabledTools := []string{
+		"server1.get_random_inspiration",
+	}
+
+	gen, err := mcpClient.Generate(ctx, "现在是几点？然后再来点灵感",
 		llm.WithMCPWorkMode(llm.TextMode),
 		llm.WithStreamingFunc(streamHandler),
 		llm.WithMCPAutoExecute(true),
 		llm.WithStateNotifyFunc(stateNotifyHandler),
 		llm.WithTemperature(0.7),
+		llm.WithMCPDisabledTools(disabledTools),
 	)
 	if err != nil {
 		log.Fatalf("生成失败: %v", err)
 	}
 
-	fmt.Print("\n\n")
+	fmt.Println("\n\n\n生成的文本:\n" + gen.Content)
+
 }

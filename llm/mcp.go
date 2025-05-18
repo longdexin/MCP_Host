@@ -12,7 +12,7 @@ import (
 
 // MCPTask MCP任务
 type MCPTask struct {
-	Server string         `json:"server"` // 服务器ID
+	Server string         `json:"server"` // ServerID
 	Tool   string         `json:"tool"`   // 工具名称
 	Args   map[string]any `json:"args"`   // 参数
 }
@@ -79,7 +79,7 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 		if mcpPrompt == "" {
 			mcpPrompt = c.prompt
 		}
-		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPTaskTag)
+		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPTaskTag, opts.MCPDisabledTools...)
 
 		systemPrompt := mcpPrompt
 		if toolsInfo != "" {
@@ -110,7 +110,7 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 		return gen, nil
 	} else {
 		// 函数调用模式
-		tools := c.createMCPTools(ctx)
+		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
 
 		toolsOption := WithTools(tools)
 		gen, err := c.llm.Generate(ctx, prompt, append(options, toolsOption)...)
@@ -154,8 +154,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 			mcpPrompt = c.prompt
 		}
 
-		// 获取工具信息
-		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPTaskTag)
+		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPTaskTag, opts.MCPDisabledTools...)
 
 		systemPrompt := mcpPrompt
 		if toolsInfo != "" {
@@ -201,7 +200,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		return gen, nil
 	} else {
 		// 函数调用模式
-		tools := c.createMCPTools(ctx)
+		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
 		toolsOption := WithTools(tools)
 
 		gen, err := c.llm.GenerateContent(ctx, messages, append(options, toolsOption)...)
@@ -425,7 +424,7 @@ func (c *MCPClient) ExecuteToolCalls(ctx context.Context, gen *Generation) error
 }
 
 // formatMCPToolsAsText 将MCP工具信息格式化为文本形式
-func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string) string {
+func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, disabledTools ...string) string {
 	var builder strings.Builder
 	builder.WriteString("可用工具列表:\n\n")
 
@@ -433,10 +432,28 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string) st
 
 	hasTools := false
 
-	// 遍历每个连接
+	// 创建禁用工具的快速查找表
+	disabledToolsMap := make(map[string]bool)
+	for _, dt := range disabledTools {
+		disabledToolsMap[dt] = true
+	}
+
 	for serverID := range connections {
 		toolsResult, err := c.host.ListTools(ctx, serverID)
 		if err != nil {
+			continue
+		}
+
+		serverHasTools := false
+		for _, tool := range toolsResult.Tools {
+			toolFullName := fmt.Sprintf("%s.%s", serverID, tool.Name)
+			if !disabledToolsMap[toolFullName] {
+				serverHasTools = true
+				break
+			}
+		}
+
+		if !serverHasTools {
 			continue
 		}
 
@@ -445,6 +462,11 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string) st
 			builder.WriteString(fmt.Sprintf("服务器 %s:\n", serverID))
 
 			for _, tool := range toolsResult.Tools {
+				toolFullName := fmt.Sprintf("%s.%s", serverID, tool.Name)
+				if disabledToolsMap[toolFullName] {
+					continue
+				}
+
 				builder.WriteString(fmt.Sprintf("  - %s: %s\n", tool.Name, tool.Description))
 
 				var properties map[string]any
@@ -535,9 +557,14 @@ func (c *MCPClient) processToolCalls(ctx context.Context, gen *Generation) error
 }
 
 // createMCPTools创建MCP工具定义
-func (c *MCPClient) createMCPTools(ctx context.Context) []Tool {
+func (c *MCPClient) createMCPTools(ctx context.Context, disabledTools ...string) []Tool {
 	var tools []Tool
 	connections := c.host.GetAllConnections()
+
+	disabledToolsMap := make(map[string]bool)
+	for _, dt := range disabledTools {
+		disabledToolsMap[dt] = true
+	}
 
 	for serverID := range connections {
 		toolsResult, err := c.host.ListTools(ctx, serverID)
@@ -546,9 +573,14 @@ func (c *MCPClient) createMCPTools(ctx context.Context) []Tool {
 		}
 
 		for _, tool := range toolsResult.Tools {
+			toolFullName := fmt.Sprintf("%s.%s", serverID, tool.Name)
+			if disabledToolsMap[toolFullName] {
+				continue
+			}
+
 			funcDef := &FunctionDefinition{
 				Name:        fmt.Sprintf("%s.%s", serverID, tool.Name),
-				Description: fmt.Sprintf("[服务器: %s] %s", serverID, tool.Description),
+				Description: fmt.Sprintf("[Server: %s] %s", serverID, tool.Description),
 				Parameters:  tool.InputSchema,
 			}
 
@@ -618,6 +650,9 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 	streamingFunc := opts.StreamingFunc
 	var taskResults []TaskResult
 
+	var capturedOutput strings.Builder
+	capturedOutput.WriteString(gen.Content)
+
 	if gen.MCPWorkMode == TextMode {
 		var err error
 		if stateNotify != nil {
@@ -645,6 +680,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		}
 
 		if streamingFunc != nil && len(taskResults) > 0 {
+			capturedOutput.WriteString("\n")
 			_ = streamingFunc(ctx, []byte("\n"))
 
 			for _, result := range taskResults {
@@ -686,10 +722,14 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 					}
 					_ = stateNotify(ctx, state)
 				}
-				_ = streamingFunc(ctx, []byte(resultOutput.String()))
+				resultStr := resultOutput.String()
+				capturedOutput.WriteString(resultStr)
+				_ = streamingFunc(ctx, []byte(resultStr))
 			}
 
-			_ = streamingFunc(ctx, []byte("——————\n"))
+			separatorStr := "——————\n"
+			capturedOutput.WriteString(separatorStr)
+			_ = streamingFunc(ctx, []byte(separatorStr))
 		}
 	} else {
 		if stateNotify != nil {
@@ -712,6 +752,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		}
 
 		if streamingFunc != nil && len(gen.ToolCalls) > 0 {
+			capturedOutput.WriteString("\n")
 			_ = streamingFunc(ctx, []byte("\n"))
 
 			resultOutput := strings.Builder{}
@@ -769,14 +810,22 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 			}
 
 			resultOutput.WriteString(fmt.Sprintf("</%s>\n", opts.MCPResultTag))
-			_ = streamingFunc(ctx, []byte(resultOutput.String()))
-			_ = streamingFunc(ctx, []byte("——————\n"))
+			resultStr := resultOutput.String()
+			capturedOutput.WriteString(resultStr)
+			_ = streamingFunc(ctx, []byte(resultStr))
+
+			separatorStr := "——————\n"
+			capturedOutput.WriteString(separatorStr)
+			_ = streamingFunc(ctx, []byte(separatorStr))
 		}
 	}
 
-	var secondStreamingFunc func(ctx context.Context, chunk []byte) error
+	var capturingStreamingFunc func(ctx context.Context, chunk []byte) error
 	if streamingFunc != nil {
-		secondStreamingFunc = streamingFunc
+		capturingStreamingFunc = func(ctx context.Context, chunk []byte) error {
+			capturedOutput.Write(chunk)
+			return streamingFunc(ctx, chunk)
+		}
 	}
 
 	// 通知开始构建消息上下文
@@ -844,8 +893,8 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 			finalOptions = append(finalOptions, opt)
 		}
 	}
-	if secondStreamingFunc != nil {
-		finalOptions = append(finalOptions, WithStreamingFunc(secondStreamingFunc))
+	if capturingStreamingFunc != nil {
+		finalOptions = append(finalOptions, WithStreamingFunc(capturingStreamingFunc))
 	}
 
 	// 通知开始生成最终回复
@@ -877,6 +926,8 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 			Data:  map[string]any{"content_length": len(finalGen.Content)},
 		})
 	}
+
+	finalGen.Content = capturedOutput.String()
 
 	// 保留原始调用的相关信息
 	finalGen.MCPWorkMode = gen.MCPWorkMode
