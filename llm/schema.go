@@ -43,6 +43,11 @@ type Generation struct {
 	ToolCalls        []ToolCall                                 `json:"tool_calls,omitempty"`
 	Usage            *Usage                                     `json:"usage,omitempty"`
 	LogProbs         *openai.ChatCompletionStreamChoiceLogprobs `json:"logprobs,omitempty"`
+
+	// MCP相关信息
+	MCPWorkMode LLMWorkMode `json:"-"` // 工作模式
+	MCPTaskTag  string      `json:"-"`
+	MCPPrompt   string
 }
 
 // Usage表示令牌使用情况

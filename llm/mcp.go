@@ -75,18 +75,14 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 			return nil, err
 		}
 
-		if opts.MCPAutoExecute {
-			taskResults, err := c.processMCPTasksWithResults(ctx, gen, opts.MCPTaskTag)
-			if err != nil {
-				return nil, err
-			}
+		// 存储MCP相关信息，以便在后续处理中使用
+		gen.MCPWorkMode = opts.MCPWorkMode
+		gen.MCPTaskTag = opts.MCPTaskTag
+		gen.MCPPrompt = mcpPrompt
 
-			if len(taskResults) > 0 {
-				if gen.GenerationInfo == nil {
-					gen.GenerationInfo = make(map[string]any)
-				}
-				gen.GenerationInfo["mcp_task_results"] = taskResults
-			}
+		// 如果启用了自动执行并存在工具调用，则处理工具调用并生成最终回复
+		if opts.MCPAutoExecute {
+			return c.ExecuteAndFeedback(ctx, gen, prompt, options...)
 		}
 
 		return gen, nil
@@ -100,11 +96,13 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 			return nil, err
 		}
 
-		if opts.MCPAutoExecute {
-			if err := c.processToolCalls(ctx, gen); err != nil {
-				return nil, err
-			}
-		} else {
+		// 存储MCP相关信息
+		gen.MCPWorkMode = opts.MCPWorkMode
+		gen.MCPTaskTag = opts.MCPTaskTag
+
+		if opts.MCPAutoExecute && len(gen.ToolCalls) > 0 {
+			return c.ExecuteAndFeedback(ctx, gen, prompt, options...)
+		} else if !opts.MCPAutoExecute {
 			c.appendToolCallsToContent(gen, opts.MCPTaskTag)
 		}
 
@@ -117,6 +115,14 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 	opts := DefaultGenerateOption()
 	for _, opt := range options {
 		opt(opts)
+	}
+
+	var userPrompt string
+	for _, msg := range messages {
+		if msg.Role == RoleUser {
+			userPrompt = msg.Content
+			break
+		}
 	}
 
 	// 在文本模式下添加MCP提示
@@ -160,18 +166,13 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 			return nil, err
 		}
 
-		if opts.MCPAutoExecute {
-			taskResults, err := c.processMCPTasksWithResults(ctx, gen, opts.MCPTaskTag)
-			if err != nil {
-				return nil, err
-			}
+		// 存储MCP相关信息
+		gen.MCPWorkMode = opts.MCPWorkMode
+		gen.MCPTaskTag = opts.MCPTaskTag
+		gen.MCPPrompt = mcpPrompt
 
-			if len(taskResults) > 0 {
-				if gen.GenerationInfo == nil {
-					gen.GenerationInfo = make(map[string]any)
-				}
-				gen.GenerationInfo["mcp_task_results"] = taskResults
-			}
+		if opts.MCPAutoExecute {
+			return c.ExecuteAndFeedback(ctx, gen, userPrompt, options...)
 		}
 
 		return gen, nil
@@ -185,11 +186,13 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 			return nil, err
 		}
 
-		if opts.MCPAutoExecute {
-			if err := c.processToolCalls(ctx, gen); err != nil {
-				return nil, err
-			}
-		} else {
+		// 存储MCP相关信息
+		gen.MCPWorkMode = opts.MCPWorkMode
+		gen.MCPTaskTag = opts.MCPTaskTag
+
+		if opts.MCPAutoExecute && len(gen.ToolCalls) > 0 {
+			return c.ExecuteAndFeedback(ctx, gen, userPrompt, options...)
+		} else if !opts.MCPAutoExecute {
 			c.appendToolCallsToContent(gen, opts.MCPTaskTag)
 		}
 
@@ -543,6 +546,180 @@ func extractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
 	}
 
 	return tasks, nil
+}
+
+// ExecuteAndFeedback 执行工具调用并将结果反馈给LLM生成最终回复
+func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, prompt string, options ...GenerateOption) (*Generation, error) {
+	if (gen.MCPWorkMode == TextMode && !containsMCPTasks(gen.Content, gen.MCPTaskTag)) ||
+		(gen.MCPWorkMode == FunctionCallMode && len(gen.ToolCalls) == 0) {
+		return gen, nil
+	}
+
+	opts := DefaultGenerateOption()
+	for _, opt := range options {
+		opt(opts)
+	}
+
+	streamingFunc := opts.StreamingFunc
+	var taskResults []TaskResult
+
+	if gen.MCPWorkMode == TextMode {
+		var err error
+		taskResults, err = c.processMCPTasksWithResults(ctx, gen, gen.MCPTaskTag)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(taskResults) == 0 {
+			return gen, nil
+		}
+
+		if streamingFunc != nil && len(taskResults) > 0 {
+			_ = streamingFunc(ctx, []byte("\n"))
+
+			for _, result := range taskResults {
+				var resultOutput strings.Builder
+				resultOutput.WriteString(fmt.Sprintf("<%s>\n", MCP_DEFAULT_RESULT_TAG))
+
+				if result.Error != "" {
+					resultOutput.WriteString(fmt.Sprintf("错误执行任务 %s.%s: %s\n",
+						result.Task.Server, result.Task.Tool, result.Error))
+				} else {
+					resultJSON, _ := json.Marshal(result.Result)
+					resultOutput.WriteString(string(resultJSON))
+					resultOutput.WriteString("\n")
+				}
+
+				resultOutput.WriteString(fmt.Sprintf("</%s>\n", MCP_DEFAULT_RESULT_TAG))
+
+				_ = streamingFunc(ctx, []byte(resultOutput.String()))
+			}
+
+			_ = streamingFunc(ctx, []byte("——————\n"))
+		}
+	} else {
+		if err := c.processToolCalls(ctx, gen); err != nil {
+			return nil, err
+		}
+
+		// 函数调用模式
+		if streamingFunc != nil && len(gen.ToolCalls) > 0 {
+			_ = streamingFunc(ctx, []byte("\n"))
+
+			resultOutput := strings.Builder{}
+			resultOutput.WriteString(fmt.Sprintf("<%s>\n", MCP_DEFAULT_RESULT_TAG))
+
+			for _, call := range gen.ToolCalls {
+				if errStr, ok := gen.GenerationInfo["tool_error_"+call.ID].(string); ok && errStr != "" {
+					resultOutput.WriteString(fmt.Sprintf("错误执行工具 %s: %s\n", call.Function.Name, errStr))
+				} else if result, ok := gen.GenerationInfo["tool_result_"+call.ID]; ok {
+					resultJSON, _ := json.Marshal(result)
+					resultOutput.WriteString(string(resultJSON))
+					resultOutput.WriteString("\n")
+				}
+			}
+
+			resultOutput.WriteString(fmt.Sprintf("</%s>\n", MCP_DEFAULT_RESULT_TAG))
+			_ = streamingFunc(ctx, []byte(resultOutput.String()))
+			_ = streamingFunc(ctx, []byte("——————\n"))
+		}
+	}
+
+	var secondStreamingFunc func(ctx context.Context, chunk []byte) error
+	if streamingFunc != nil {
+		secondStreamingFunc = streamingFunc
+	}
+
+	var messages []Message
+
+	if gen.MCPWorkMode == TextMode {
+		systemMsg := NewSystemMessage("", gen.MCPPrompt)
+		messages = append(messages, *systemMsg)
+		messages = append(messages, *NewUserMessage("", prompt))
+
+		for _, result := range taskResults {
+			var toolMsg string
+			if result.Error != "" {
+				toolMsg = fmt.Sprintf("工具执行错误: %s.%s\n错误: %s",
+					result.Task.Server, result.Task.Tool, result.Error)
+			} else {
+				resultJSON, _ := json.Marshal(result.Result)
+				toolMsg = fmt.Sprintf("我已经使用工具 %s.%s 获取到以下信息:\n%s",
+					result.Task.Server, result.Task.Tool, string(resultJSON))
+			}
+
+			messages = append(messages, *NewUserMessage("", toolMsg))
+		}
+	} else {
+		systemMsg := NewSystemMessage("", "你是一个AI助手，可以使用工具帮助用户解决问题。请基于工具调用的结果，给出完整的回复。")
+		messages = append(messages, *systemMsg)
+		messages = append(messages, *NewUserMessage("", prompt))
+		assistantMsg := NewAssistantMessage("", "", gen.ToolCalls)
+		messages = append(messages, *assistantMsg)
+
+		for _, call := range gen.ToolCalls {
+			var resultContent string
+			if errStr, ok := gen.GenerationInfo["tool_error_"+call.ID].(string); ok && errStr != "" {
+				resultContent = fmt.Sprintf("错误: %s", errStr)
+			} else if result, ok := gen.GenerationInfo["tool_result_"+call.ID]; ok {
+				resultJSON, _ := json.Marshal(result)
+				resultContent = string(resultJSON)
+			} else {
+				continue
+			}
+
+			messages = append(messages, *NewToolMessage(call.ID, resultContent))
+		}
+	}
+
+	finalOptions := make([]GenerateOption, 0)
+	for _, opt := range options {
+		if !isAutoExecuteOption(opt) {
+			finalOptions = append(finalOptions, opt)
+		}
+	}
+	if secondStreamingFunc != nil {
+		finalOptions = append(finalOptions, WithStreamingFunc(secondStreamingFunc))
+	}
+
+	finalGen, err := c.llm.GenerateContent(ctx, messages, finalOptions...)
+	if err != nil {
+		return nil, err
+	}
+
+	// 保留原始调用的相关信息
+	finalGen.MCPWorkMode = gen.MCPWorkMode
+	finalGen.MCPTaskTag = gen.MCPTaskTag
+	finalGen.MCPPrompt = gen.MCPPrompt
+
+	// 合并信息
+	if finalGen.GenerationInfo == nil {
+		finalGen.GenerationInfo = make(map[string]any)
+	}
+	if len(taskResults) > 0 {
+		finalGen.GenerationInfo["mcp_task_results"] = taskResults
+	} else {
+		for k, v := range gen.GenerationInfo {
+			if strings.HasPrefix(k, "tool_result_") || strings.HasPrefix(k, "tool_error_") {
+				finalGen.GenerationInfo[k] = v
+			}
+		}
+	}
+
+	return finalGen, nil
+}
+
+// containsMCPTasks 检查内容中是否包含MCP任务
+func containsMCPTasks(content string, taskTag string) bool {
+	re := regexp.MustCompile(fmt.Sprintf(`<%s>\n.*?\n</%s>`, taskTag, taskTag))
+	return re.MatchString(content)
+}
+
+// isAutoExecuteOption 检查是否是自动执行选项
+func isAutoExecuteOption(opt GenerateOption) bool {
+	testOpt := DefaultGenerateOption()
+	opt(testOpt)
+	return testOpt.MCPAutoExecute
 }
 
 // taskToString 将任务转换为字符串

@@ -74,6 +74,8 @@ const (
 	FunctionCallBehaviorAuto FunctionCallBehavior = "auto"
 	// 默认的MCP任务标签
 	MCP_DEFAULT_TASK_TAG = "MCP_HOST_TASK"
+	// 默认的MCP结果标签
+	MCP_DEFAULT_RESULT_TAG = "MCP_HOST_RESULT"
 )
 
 // WithModel 指定要使用的模型名称
