@@ -746,7 +746,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 				_ = streamingFunc(ctx, []byte(resultStr))
 			}
 
-			separatorStr := "——————\n"
+			separatorStr := "——————\n\n"
 			capturedOutput.WriteString(separatorStr)
 			_ = streamingFunc(ctx, []byte(separatorStr))
 		}
@@ -848,7 +848,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 			capturedOutput.WriteString(resultStr)
 			_ = streamingFunc(ctx, []byte(resultStr))
 
-			separatorStr := "——————\n"
+			separatorStr := "——————\n\n"
 			capturedOutput.WriteString(separatorStr)
 			_ = streamingFunc(ctx, []byte(separatorStr))
 		}
