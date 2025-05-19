@@ -625,6 +625,17 @@ func extractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
 	return tasks, nil
 }
 
+// MCPToolExecutionResult MCP工具执行结果的JSON表示
+type MCPToolExecutionResult struct {
+	Server string         `json:"server"`           // 服务器ID
+	Tool   string         `json:"tool"`             // 工具名称
+	Args   map[string]any `json:"args"`             // 调用参数
+	Status string         `json:"status"`           // 状态："success" 或 "error"
+	Result any            `json:"result,omitempty"` // 执行结果，如果成功
+	Error  string         `json:"error,omitempty"`  // 错误信息，如果失败
+	ID     string         `json:"id,omitempty"`     // 工具调用ID（函数调用模式）
+}
+
 // ExecuteAndFeedback 执行工具调用并将结果反馈给LLM生成最终回复
 func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, prompt string, options ...GenerateOption) (*Generation, error) {
 	if (gen.MCPWorkMode == TextMode && !containsMCPTasks(gen.Content, gen.MCPTaskTag)) ||
@@ -697,15 +708,23 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 				var resultOutput strings.Builder
 				resultOutput.WriteString(fmt.Sprintf("<%s>\n", opts.MCPResultTag))
 
-				if result.Error != "" {
-					resultOutput.WriteString(fmt.Sprintf("错误执行任务 %s.%s: %s\n",
-						result.Task.Server, result.Task.Tool, result.Error))
-				} else {
-					resultJSON, _ := json.Marshal(result.Result)
-					resultOutput.WriteString(string(resultJSON))
-					resultOutput.WriteString("\n")
+				resultInfo := MCPToolExecutionResult{
+					Server: result.Task.Server,
+					Tool:   result.Task.Tool,
+					Args:   result.Task.Args,
 				}
 
+				if result.Error != "" {
+					resultInfo.Status = "error"
+					resultInfo.Error = result.Error
+				} else {
+					resultInfo.Status = "success"
+					resultInfo.Result = result.Result
+				}
+
+				resultJSON, _ := json.Marshal(resultInfo)
+				resultOutput.WriteString(string(resultJSON))
+				resultOutput.WriteString("\n")
 				resultOutput.WriteString(fmt.Sprintf("</%s>\n", opts.MCPResultTag))
 
 				if stateNotify != nil {
@@ -761,6 +780,8 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 			for _, call := range gen.ToolCalls {
 				serverID := ""
 				toolName := ""
+				var args map[string]any
+
 				parts := strings.Split(call.Function.Name, ".")
 				if len(parts) == 2 {
 					serverID = parts[0]
@@ -769,6 +790,8 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 					serverID = "unknown"
 					toolName = call.Function.Name
 				}
+
+				_ = json.Unmarshal([]byte(call.Function.Arguments), &args)
 
 				if stateNotify != nil {
 					_ = stateNotify(ctx, MCPExecutionState{
@@ -780,8 +803,16 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 					})
 				}
 
+				resultInfo := MCPToolExecutionResult{
+					Server: serverID,
+					Tool:   toolName,
+					Args:   args,
+					ID:     call.ID,
+				}
+
 				if errStr, ok := gen.GenerationInfo["tool_error_"+call.ID].(string); ok && errStr != "" {
-					resultOutput.WriteString(fmt.Sprintf("错误执行工具 %s: %s\n", call.Function.Name, errStr))
+					resultInfo.Status = "error"
+					resultInfo.Error = errStr
 
 					if stateNotify != nil {
 						_ = stateNotify(ctx, MCPExecutionState{
@@ -793,9 +824,8 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 						})
 					}
 				} else if result, ok := gen.GenerationInfo["tool_result_"+call.ID]; ok {
-					resultJSON, _ := json.Marshal(result)
-					resultOutput.WriteString(string(resultJSON))
-					resultOutput.WriteString("\n")
+					resultInfo.Status = "success"
+					resultInfo.Result = result
 
 					if stateNotify != nil {
 						_ = stateNotify(ctx, MCPExecutionState{
@@ -807,6 +837,10 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 						})
 					}
 				}
+
+				resultJSON, _ := json.Marshal(resultInfo)
+				resultOutput.WriteString(string(resultJSON))
+				resultOutput.WriteString("\n")
 			}
 
 			resultOutput.WriteString(fmt.Sprintf("</%s>\n", opts.MCPResultTag))
