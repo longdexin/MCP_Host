@@ -140,9 +140,9 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 	}
 
 	var userPrompt string
-	for _, msg := range messages {
-		if msg.Role == RoleUser {
-			userPrompt = msg.Content
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == RoleUser {
+			userPrompt = messages[i].Content
 			break
 		}
 	}
@@ -939,6 +939,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		})
 	}
 
+	fmt.Printf("\n\n\n\n生成最终回复 \n\n%v\n\n--------\n\n", messages)
 	finalGen, err := c.llm.GenerateContent(ctx, messages, finalOptions...)
 	if err != nil {
 		// 通知生成响应失败
