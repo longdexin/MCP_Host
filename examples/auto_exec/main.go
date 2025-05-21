@@ -30,11 +30,25 @@ func stateNotifyHandler(ctx context.Context, state llm.MCPExecutionState) error 
 	case "tool_call":
 		fmt.Printf("\n[开始调用工具: %s.%s]\n", state.ServerID, state.ToolName)
 	case "tool_result":
-		fmt.Printf("\n[工具执行结果: %s.%s.%s]\n", state.ServerID, state.ToolName, state.Data)
+		fmt.Printf("\n[工具执行结果: %s.%s]\n", state.ServerID, state.ToolName)
 	case "generating_response":
 		fmt.Printf("\n[生成AI回复...]\n")
 	case "process_complete":
-		fmt.Printf("\n[处理完成]\n")
+		if rounds, ok := state.Data["execution_rounds"].(int); ok {
+			fmt.Printf("\n[处理完成, 共执行 %d 轮工具调用]\n", rounds)
+		} else {
+			fmt.Printf("\n[处理完成]\n")
+		}
+	case "execution_round":
+		if round, ok := state.Data["round"].(int); ok {
+			fmt.Printf("\n[开始执行第 %d 轮工具调用]\n", round)
+		}
+	case "intermediate_generation":
+		if state.Stage == "start" {
+			fmt.Printf("\n[生成中间分析...]\n")
+		} else if state.Stage == "complete" {
+			fmt.Printf("\n[中间分析生成完成]\n")
+		}
 	}
 	return nil
 }
@@ -49,7 +63,7 @@ func main() {
 	defer cancel()
 
 	// 连接服务器
-	conn1, err := host.ConnectSSE(ctx, "server1", "http://mcp.hm.tianli0.top/mcp/all/"+MCP_API_Secret+"/sse")
+	conn1, err := host.ConnectSSE(ctx, "server1", "https://mcp.amap.com/sse?key="+MCP_API_Secret)
 	if err != nil {
 		log.Fatalf("无法连接到server1: %v", err)
 	}
@@ -76,18 +90,16 @@ func main() {
 		"server1.get_random_inspiration",
 	}
 
-	gen, err := mcpClient.Generate(ctx, "现在是几点？然后再来点灵感",
+	_, err = mcpClient.Generate(ctx, "从苏州站到上海虹桥站的最佳出行方案是什么？",
 		llm.WithMCPWorkMode(llm.TextMode),
 		llm.WithStreamingFunc(streamHandler),
 		llm.WithMCPAutoExecute(true),
 		llm.WithStateNotifyFunc(stateNotifyHandler),
-		llm.WithTemperature(0.7),
 		llm.WithMCPDisabledTools(disabledTools),
+		llm.WithMCPMaxToolExecutionRounds(5),
 	)
 	if err != nil {
 		log.Fatalf("生成失败: %v", err)
 	}
-
-	fmt.Println("\n\n\n生成的文本:\n" + gen.Content)
 
 }

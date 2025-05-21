@@ -426,7 +426,7 @@ func (c *MCPClient) ExecuteToolCalls(ctx context.Context, gen *Generation) error
 // formatMCPToolsAsText 将MCP工具信息格式化为文本形式
 func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, disabledTools ...string) string {
 	var builder strings.Builder
-	builder.WriteString("可用工具列表:\n\n")
+	builder.WriteString("Available tools:\n\n")
 
 	connections := c.host.GetAllConnections()
 
@@ -459,7 +459,7 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 
 		if len(toolsResult.Tools) > 0 {
 			hasTools = true
-			builder.WriteString(fmt.Sprintf("服务器 %s:\n", serverID))
+			builder.WriteString(fmt.Sprintf("Server '%s':\n", serverID))
 
 			for _, tool := range toolsResult.Tools {
 				toolFullName := fmt.Sprintf("%s.%s", serverID, tool.Name)
@@ -482,7 +482,7 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 				}
 
 				if len(properties) > 0 {
-					builder.WriteString("    参数:\n")
+					builder.WriteString("    Parameters:\n")
 					for paramName, paramInfo := range properties {
 						paramDesc := ""
 						paramType := ""
@@ -508,7 +508,7 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 		return ""
 	}
 
-	builder.WriteString("Want to use a tool? Please use the following format:\n")
+	builder.WriteString("Please follow the format below to call the tool:\n")
 	builder.WriteString(fmt.Sprintf("<%s>\n", taskTag))
 	builder.WriteString("{\n")
 	builder.WriteString("  \"server\": \"Server ID\",\n")
@@ -594,11 +594,22 @@ func (c *MCPClient) createMCPTools(ctx context.Context, disabledTools ...string)
 	return tools
 }
 
+// 标签正则表达式匹配
+func taskRegex(taskTag string) *regexp.Regexp {
+	return regexp.MustCompile(fmt.Sprintf(`(?s)<%s>\s*(.*?)\s*</%s>`, taskTag, taskTag))
+}
+
+// containsMCPTasks 检查内容中是否包含MCP任务
+func containsMCPTasks(content string, taskTag string) bool {
+	re := taskRegex(taskTag)
+	return re.MatchString(content)
+}
+
 // extractMCPTasks 从文本中提取MCP任务
 func extractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
 	var tasks []MCPTask
 
-	re := regexp.MustCompile(fmt.Sprintf(`<%s>\n(.*?)\n</%s>`, taskTag, taskTag))
+	re := taskRegex(taskTag)
 	matches := re.FindAllStringSubmatch(content, -1)
 
 	for _, match := range matches {
@@ -607,6 +618,8 @@ func extractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
 		}
 
 		taskJSON := match[1]
+
+		taskJSON = strings.TrimSpace(taskJSON)
 
 		// 解析JSON
 		var task MCPTask
@@ -638,371 +651,32 @@ type MCPToolExecutionResult struct {
 
 // ExecuteAndFeedback 执行工具调用并将结果反馈给LLM生成最终回复
 func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, prompt string, options ...GenerateOption) (*Generation, error) {
-	if (gen.MCPWorkMode == TextMode && !containsMCPTasks(gen.Content, gen.MCPTaskTag)) ||
-		(gen.MCPWorkMode == FunctionCallMode && len(gen.ToolCalls) == 0) {
+	if !c.hasToolCalls(gen) {
 		return gen, nil
 	}
 
-	opts := DefaultGenerateOption()
-	for _, opt := range options {
-		opt(opts)
-	}
+	opts, originalOptions := c.prepareOptions(options)
+	state := NewExecutionState(gen, prompt, opts, originalOptions...)
+	c.notifyExecutionStart(ctx, state)
 
-	stateNotify := opts.StateNotifyFunc
-
-	if stateNotify != nil {
-		_ = stateNotify(ctx, MCPExecutionState{
-			Type:  "process_start",
-			Stage: "start",
-			Data:  map[string]any{"mode": gen.MCPWorkMode},
-		})
-	}
-
-	streamingFunc := opts.StreamingFunc
-	var taskResults []TaskResult
-
-	var capturedOutput strings.Builder
-	capturedOutput.WriteString(gen.Content)
-
-	if gen.MCPWorkMode == TextMode {
-		var err error
-		if stateNotify != nil {
-			_ = stateNotify(ctx, MCPExecutionState{
-				Type:  "extracting_tasks",
-				Stage: "start",
-			})
-		}
-
-		taskResults, err = c.processMCPTasksWithResults(ctx, gen, gen.MCPTaskTag)
-		if err != nil {
-			return nil, err
-		}
-
-		if stateNotify != nil {
-			_ = stateNotify(ctx, MCPExecutionState{
-				Type:  "extracting_tasks",
-				Stage: "complete",
-				Data:  map[string]any{"task_count": len(taskResults)},
-			})
-		}
-
-		if len(taskResults) == 0 {
-			return gen, nil
-		}
-
-		if streamingFunc != nil && len(taskResults) > 0 {
-			capturedOutput.WriteString("\n")
-			_ = streamingFunc(ctx, []byte("\n"))
-
-			for _, result := range taskResults {
-				if stateNotify != nil {
-					_ = stateNotify(ctx, MCPExecutionState{
-						Type:     "tool_call",
-						ServerID: result.Task.Server,
-						ToolName: result.Task.Tool,
-						Stage:    "start",
-						Data:     result.Task.Args,
-					})
-				}
-
-				var resultOutput strings.Builder
-				resultOutput.WriteString(fmt.Sprintf("<%s>\n", opts.MCPResultTag))
-
-				resultInfo := MCPToolExecutionResult{
-					Server: result.Task.Server,
-					Tool:   result.Task.Tool,
-					Args:   result.Task.Args,
-				}
-
-				if result.Error != "" {
-					resultInfo.Status = "error"
-					resultInfo.Error = result.Error
-				} else {
-					resultInfo.Status = "success"
-					resultInfo.Result = result.Result
-				}
-
-				resultJSON, _ := json.Marshal(resultInfo)
-				resultOutput.WriteString(string(resultJSON))
-				resultOutput.WriteString("\n")
-				resultOutput.WriteString(fmt.Sprintf("</%s>\n", opts.MCPResultTag))
-
-				if stateNotify != nil {
-					state := MCPExecutionState{
-						Type:     "tool_result",
-						ServerID: result.Task.Server,
-						ToolName: result.Task.Tool,
-						Stage:    "complete",
-					}
-					if result.Error != "" {
-						state.Data = map[string]any{"error": result.Error}
-					} else {
-						state.Data = result.Result
-					}
-					_ = stateNotify(ctx, state)
-				}
-				resultStr := resultOutput.String()
-				capturedOutput.WriteString(resultStr)
-				_ = streamingFunc(ctx, []byte(resultStr))
-			}
-
-			separatorStr := "\n\n"
-			capturedOutput.WriteString(separatorStr)
-			_ = streamingFunc(ctx, []byte(separatorStr))
-		}
-	} else {
-		if stateNotify != nil {
-			_ = stateNotify(ctx, MCPExecutionState{
-				Type:  "processing_tool_calls",
-				Stage: "start",
-				Data:  map[string]any{"call_count": len(gen.ToolCalls)},
-			})
-		}
-
-		if err := c.processToolCalls(ctx, gen); err != nil {
-			return nil, err
-		}
-
-		if stateNotify != nil {
-			_ = stateNotify(ctx, MCPExecutionState{
-				Type:  "processing_tool_calls",
-				Stage: "complete",
-			})
-		}
-
-		if streamingFunc != nil && len(gen.ToolCalls) > 0 {
-			capturedOutput.WriteString("\n")
-			_ = streamingFunc(ctx, []byte("\n"))
-
-			resultOutput := strings.Builder{}
-			resultOutput.WriteString(fmt.Sprintf("<%s>\n", opts.MCPResultTag))
-
-			for _, call := range gen.ToolCalls {
-				serverID := ""
-				toolName := ""
-				var args map[string]any
-
-				parts := strings.Split(call.Function.Name, ".")
-				if len(parts) == 2 {
-					serverID = parts[0]
-					toolName = parts[1]
-				} else {
-					serverID = "unknown"
-					toolName = call.Function.Name
-				}
-
-				_ = json.Unmarshal([]byte(call.Function.Arguments), &args)
-
-				if stateNotify != nil {
-					_ = stateNotify(ctx, MCPExecutionState{
-						Type:     "tool_call",
-						ServerID: serverID,
-						ToolName: toolName,
-						Stage:    "start",
-						Data:     map[string]any{"call_id": call.ID},
-					})
-				}
-
-				resultInfo := MCPToolExecutionResult{
-					Server: serverID,
-					Tool:   toolName,
-					Args:   args,
-					ID:     call.ID,
-				}
-
-				if errStr, ok := gen.GenerationInfo["tool_error_"+call.ID].(string); ok && errStr != "" {
-					resultInfo.Status = "error"
-					resultInfo.Error = errStr
-
-					if stateNotify != nil {
-						_ = stateNotify(ctx, MCPExecutionState{
-							Type:     "tool_result",
-							ServerID: serverID,
-							ToolName: toolName,
-							Stage:    "complete",
-							Data:     map[string]any{"error": errStr, "call_id": call.ID},
-						})
-					}
-				} else if result, ok := gen.GenerationInfo["tool_result_"+call.ID]; ok {
-					resultInfo.Status = "success"
-					resultInfo.Result = result
-
-					if stateNotify != nil {
-						_ = stateNotify(ctx, MCPExecutionState{
-							Type:     "tool_result",
-							ServerID: serverID,
-							ToolName: toolName,
-							Stage:    "complete",
-							Data:     map[string]any{"result": result, "call_id": call.ID},
-						})
-					}
-				}
-
-				resultJSON, _ := json.Marshal(resultInfo)
-				resultOutput.WriteString(string(resultJSON))
-				resultOutput.WriteString("\n")
-			}
-
-			resultOutput.WriteString(fmt.Sprintf("</%s>\n", opts.MCPResultTag))
-			resultStr := resultOutput.String()
-			capturedOutput.WriteString(resultStr)
-			_ = streamingFunc(ctx, []byte(resultStr))
-
-			separatorStr := "\n\n"
-			capturedOutput.WriteString(separatorStr)
-			_ = streamingFunc(ctx, []byte(separatorStr))
-		}
-	}
-
-	var capturingStreamingFunc func(ctx context.Context, chunk []byte) error
-	if streamingFunc != nil {
-		capturingStreamingFunc = func(ctx context.Context, chunk []byte) error {
-			capturedOutput.Write(chunk)
-			return streamingFunc(ctx, chunk)
-		}
-	}
-
-	// 通知开始构建消息上下文
-	if stateNotify != nil {
-		_ = stateNotify(ctx, MCPExecutionState{
-			Type:  "building_context",
-			Stage: "start",
-		})
-	}
-
-	var messages []Message
-
-	if gen.MCPWorkMode == TextMode {
-		systemMsg := NewSystemMessage("", gen.MCPPrompt)
-		messages = append(messages, *systemMsg)
-		messages = append(messages, *NewUserMessage("", prompt))
-
-		for _, result := range taskResults {
-			var toolMsg string
-			if result.Error != "" {
-				toolMsg = fmt.Sprintf(c.toolErrorMsgTemplate,
-					result.Task.Server, result.Task.Tool, result.Error)
-			} else {
-				resultJSON, _ := json.Marshal(result.Result)
-				toolMsg = fmt.Sprintf(c.toolResultMsgTemplate,
-					result.Task.Server, result.Task.Tool, string(resultJSON))
-			}
-
-			messages = append(messages, *NewUserMessage("", toolMsg))
-		}
-	} else {
-		systemMsg := NewSystemMessage("", c.functionCallSystemPrompt)
-		messages = append(messages, *systemMsg)
-		messages = append(messages, *NewUserMessage("", prompt))
-		assistantMsg := NewAssistantMessage("", "", gen.ToolCalls)
-		messages = append(messages, *assistantMsg)
-
-		for _, call := range gen.ToolCalls {
-			var resultContent string
-			if errStr, ok := gen.GenerationInfo["tool_error_"+call.ID].(string); ok && errStr != "" {
-				resultContent = fmt.Sprintf("Error: %s", errStr)
-			} else if result, ok := gen.GenerationInfo["tool_result_"+call.ID]; ok {
-				resultJSON, _ := json.Marshal(result)
-				resultContent = string(resultJSON)
-			} else {
-				continue
-			}
-
-			messages = append(messages, *NewToolMessage(call.ID, resultContent))
-		}
-	}
-
-	// 通知消息上下文构建完成
-	if stateNotify != nil {
-		_ = stateNotify(ctx, MCPExecutionState{
-			Type:  "building_context",
-			Stage: "complete",
-			Data:  map[string]any{"message_count": len(messages)},
-		})
-	}
-
-	finalOptions := make([]GenerateOption, 0)
-	for _, opt := range options {
-		if !isAutoExecuteOption(opt) {
-			finalOptions = append(finalOptions, opt)
-		}
-	}
-	if capturingStreamingFunc != nil {
-		finalOptions = append(finalOptions, WithStreamingFunc(capturingStreamingFunc))
-	}
-
-	// 通知开始生成最终回复
-	if stateNotify != nil {
-		_ = stateNotify(ctx, MCPExecutionState{
-			Type:  "generating_response",
-			Stage: "start",
-		})
-	}
-
-	fmt.Printf("\n\n\n\n生成最终回复 \n\n%v\n\n--------\n\n", messages)
-	finalGen, err := c.llm.GenerateContent(ctx, messages, finalOptions...)
-	if err != nil {
-		// 通知生成响应失败
-		if stateNotify != nil {
-			_ = stateNotify(ctx, MCPExecutionState{
-				Type:  "generating_response",
-				Stage: "error",
-				Data:  map[string]any{"error": err.Error()},
-			})
-		}
+	// 执行工具调用循环
+	if err := c.executeToolsLoop(ctx, state); err != nil {
 		return nil, err
 	}
 
-	// 通知生成响应成功
-	if stateNotify != nil {
-		_ = stateNotify(ctx, MCPExecutionState{
-			Type:  "generating_response",
-			Stage: "complete",
-			Data:  map[string]any{"content_length": len(finalGen.Content)},
-		})
+	finalGen := &Generation{
+		Content:        state.capturedOutput.String(),
+		MCPWorkMode:    state.gen.MCPWorkMode,
+		MCPTaskTag:     state.gen.MCPTaskTag,
+		MCPResultTag:   state.gen.MCPResultTag,
+		MCPPrompt:      state.gen.MCPPrompt,
+		GenerationInfo: make(map[string]any),
 	}
 
-	finalGen.Content = capturedOutput.String()
-
-	// 保留原始调用的相关信息
-	finalGen.MCPWorkMode = gen.MCPWorkMode
-	finalGen.MCPTaskTag = gen.MCPTaskTag
-	finalGen.MCPResultTag = gen.MCPResultTag
-	finalGen.MCPPrompt = gen.MCPPrompt
-
-	// 合并信息
-	if finalGen.GenerationInfo == nil {
-		finalGen.GenerationInfo = make(map[string]any)
-	}
-	if len(taskResults) > 0 {
-		finalGen.GenerationInfo["mcp_task_results"] = taskResults
-	} else {
-		for k, v := range gen.GenerationInfo {
-			if strings.HasPrefix(k, "tool_result_") || strings.HasPrefix(k, "tool_error_") {
-				finalGen.GenerationInfo[k] = v
-			}
-		}
-	}
-
-	// 通知整个处理过程完成
-	if stateNotify != nil {
-		_ = stateNotify(ctx, MCPExecutionState{
-			Type:  "process_complete",
-			Stage: "complete",
-			Data: map[string]any{
-				"has_results": len(taskResults) > 0 || len(gen.ToolCalls) > 0,
-				"mode":        gen.MCPWorkMode,
-			},
-		})
-	}
+	c.mergeGenerationInfo(finalGen, state)
+	c.notifyProcessComplete(ctx, state)
 
 	return finalGen, nil
-}
-
-// containsMCPTasks 检查内容中是否包含MCP任务
-func containsMCPTasks(content string, taskTag string) bool {
-	re := regexp.MustCompile(fmt.Sprintf(`<%s>\n.*?\n</%s>`, taskTag, taskTag))
-	return re.MatchString(content)
 }
 
 // isAutoExecuteOption 检查是否是自动执行选项

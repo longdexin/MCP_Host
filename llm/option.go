@@ -33,12 +33,13 @@ type GenerateOptions struct {
 	TopLogProbs            int                                           `json:"top_logprobs,omitempty"`        // 返回每个位置最可能的令牌数量
 
 	// MCP相关选项
-	MCPWorkMode      LLMWorkMode `json:"-"` // LLM工作模式
-	MCPPrompt        string      `json:"-"` // 在文本模式下使用的提示
-	MCPAutoExecute   bool        `json:"-"` // 是否自动执行MCP工具调用
-	MCPTaskTag       string      `json:"-"` // MCP任务标签，默认为 MCP_HOST_TASK
-	MCPResultTag     string      `json:"-"` // MCP结果标签，默认为 MCP_HOST_RESULT
-	MCPDisabledTools []string    `json:"-"` // 禁用的工具列表，格式为 "serverID.toolName"
+	MCPWorkMode               LLMWorkMode `json:"-"` // LLM工作模式
+	MCPPrompt                 string      `json:"-"` // 在文本模式下使用的提示
+	MCPAutoExecute            bool        `json:"-"` // 是否自动执行MCP工具调用
+	MCPTaskTag                string      `json:"-"` // MCP任务标签，默认为 MCP_HOST_TASK
+	MCPResultTag              string      `json:"-"` // MCP结果标签，默认为 MCP_HOST_RESULT
+	MCPDisabledTools          []string    `json:"-"` // 禁用的工具列表，格式为 "serverID.toolName"
+	MCPMaxToolExecutionRounds int         `json:"-"` // 最大工具执行轮次
 
 	StateNotifyFunc StateNotifyFunc `json:"-"` // 状态通知回调
 }
@@ -188,25 +189,35 @@ func WithMCPDisabledTools(disabledTools []string) GenerateOption {
 	}
 }
 
+// WithMCPMaxToolExecutionRounds 指定MCP最大工具执行轮次
+func WithMCPMaxToolExecutionRounds(rounds int) GenerateOption {
+	return func(o *GenerateOptions) {
+		if rounds > 0 {
+			o.MCPMaxToolExecutionRounds = rounds
+		}
+	}
+}
+
 // DefaultGenerateOption返回默认的生成选项
 func DefaultGenerateOption() *GenerateOptions {
 	return &GenerateOptions{
-		ParallelToolCalls: nil,
-		MCPWorkMode:       TextMode,
-		MCPPrompt:         defaultMCPPrompt,
-		MCPAutoExecute:    false, // 默认不自动执行
-		MCPTaskTag:        MCP_DEFAULT_TASK_TAG,
-		MCPResultTag:      MCP_DEFAULT_RESULT_TAG,
+		ParallelToolCalls:         nil,
+		MCPWorkMode:               TextMode,
+		MCPPrompt:                 defaultMCPPrompt,
+		MCPAutoExecute:            false, // 默认不自动执行
+		MCPTaskTag:                MCP_DEFAULT_TASK_TAG,
+		MCPResultTag:              MCP_DEFAULT_RESULT_TAG,
+		MCPMaxToolExecutionRounds: 0,
 	}
 }
 
 // MCPExecutionState  MCP执行状态
 type MCPExecutionState struct {
-	Type     string // "tool_call", "tool_result", "llm_response"等
-	ServerID string // 服务器ID（如果是工具调用）
-	ToolName string // 工具名称（如果是工具调用）
-	Stage    string // "start", "complete"等
-	Data     any    // 与状态相关的数据
+	Type     string         // "tool_call", "tool_result", "llm_response", "execution_round", "intermediate_generation" 等
+	Stage    string         // "start", "complete", "error" 等
+	ServerID string         // 对于tool_call和tool_result, 服务器ID
+	ToolName string         // 对于tool_call和tool_result, 工具名称
+	Data     map[string]any // 其他相关数据
 }
 
 type StateNotifyFunc func(ctx context.Context, state MCPExecutionState) error
