@@ -430,11 +430,6 @@ func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state
 		messages = append(messages, *NewUserMessage("", guidanceMsg))
 	}
 
-	fmt.Printf("\n\n------分隔线------\n\n")
-	for _, msg := range messages {
-		fmt.Printf("Role: %s, Content: %s\n", msg.Role, msg.Content)
-	}
-	fmt.Printf("\n\n------分隔线------\n\n")
 	return messages
 }
 
