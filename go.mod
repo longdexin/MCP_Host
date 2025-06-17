@@ -1,4 +1,4 @@
-module github.com/Longdexin/MCP_Host
+module github.com/longdexin/MCP_Host
 
 go 1.24.4
 
