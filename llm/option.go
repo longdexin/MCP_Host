@@ -15,7 +15,7 @@ type GenerateOptions struct {
 	StreamingFunc          func(ctx context.Context, chunk []byte) error `json:"-"`                             // 流式响应的回调函数
 	ReasoningStreamingFunc func(ctx context.Context, chunk []byte) error `json:"-"`                             // 推理过程的流式响应回调函数
 	TopK                   int                                           `json:"top_k"`                         // Top-K采样的令牌数量
-	TopP                   float64                                       `json:"top_p"`                         // Top-P采样的累积概率
+	TopP                   float32                                       `json:"top_p"`                         // Top-P采样的累积概率
 	Seed                   int                                           `json:"seed"`                          // 确定性采样的种子
 	MinLength              int                                           `json:"min_length"`                    // 生成文本的最小长度
 	MaxLength              int                                           `json:"max_length"`                    // 生成文本的最大长度

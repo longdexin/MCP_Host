@@ -122,6 +122,10 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 			}
 		}
 
+		if msg.Content == "" {
+			msg.Content = " "
+		}
+
 		msgs = append(msgs, openai.ChatCompletionMessage{
 			Role:       string(msg.Role),
 			Name:       msg.Name,
@@ -142,6 +146,7 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 		PresencePenalty:  opts.PresencePenalty,
 		Stop:             opts.StopWords,
 		Stream:           opts.StreamingFunc != nil,
+		TopP:             opts.TopP,
 		// StreamOptions: &openai.StreamOptions{
 		// 	IncludeUsage: true,
 		// },
