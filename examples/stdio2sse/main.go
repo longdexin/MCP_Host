@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/TIANLI0/MCP_Host/adapters/stdio2sse"
+	"github.com/Longdexin/MCP_Host/adapters/stdio2sse"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 

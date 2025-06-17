@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/TIANLI0/MCP_Host"
+	"github.com/Longdexin/MCP_Host"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 

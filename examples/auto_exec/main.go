@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/TIANLI0/MCP_Host"
-	"github.com/TIANLI0/MCP_Host/llm"
+	"github.com/Longdexin/MCP_Host"
+	"github.com/Longdexin/MCP_Host/llm"
 )
 
 // 示例配置，实际不可用
