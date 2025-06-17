@@ -7,7 +7,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Longdexin/MCP_Host"
+	"github.com/longdexin/MCP_Host"
 )
 
 // MCPTask MCP任务
