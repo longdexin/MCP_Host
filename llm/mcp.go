@@ -610,6 +610,12 @@ func extractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
 	var tasks []MCPTask
 
 	re := taskRegex(taskTag)
+
+	// 只需要最后一个</think>标签后的文本
+	if lastIndex := strings.LastIndex(content, "</think>"); lastIndex >= 0 {
+		content = content[lastIndex+8:]
+	}
+
 	matches := re.FindAllStringSubmatch(content, -1)
 
 	for _, match := range matches {
