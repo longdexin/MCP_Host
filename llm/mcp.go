@@ -12,9 +12,10 @@ import (
 
 // MCPTask MCP任务
 type MCPTask struct {
-	Server string         `json:"server"` // ServerID
-	Tool   string         `json:"tool"`   // 工具名称
-	Args   map[string]any `json:"args"`   // 参数
+	Server string         `json:"server"`        // ServerID
+	Tool   string         `json:"tool"`          // 工具名称
+	Args   map[string]any `json:"args"`          // 参数
+	Text   string         `json:"text,optional"` // 原始任务字符串
 }
 
 // TaskResult 任务执行的结果
@@ -223,16 +224,19 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 }
 
 // processMCPTasksWithResults 解析并执行任务，返回结果列表
-func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, gen *Generation, taskTag ...string) ([]TaskResult, error) {
+func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *ExecutionState, taskTag ...string) ([]TaskResult, error) {
 	tag := MCP_DEFAULT_TASK_TAG
 	if len(taskTag) > 0 && taskTag[0] != "" {
 		tag = taskTag[0]
 	}
-	if gen.MCPTaskTag != "" {
-		tag = gen.MCPTaskTag
+	if state.gen.MCPTaskTag != "" {
+		tag = state.gen.MCPTaskTag
 	}
-
-	tasks, err := c.ExtractMCPTasks(gen.Content, tag)
+	executedTaskTextMap := make(map[string]struct{}, len(state.allTaskResults))
+	for _, taskResult := range state.allTaskResults {
+		executedTaskTextMap[taskResult.Task.Text] = struct{}{}
+	}
+	tasks, err := c.ExtractMCPTasks(state.gen.Content, tag)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +248,12 @@ func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, gen *Generat
 	var results []TaskResult
 
 	// 执行任务
+TASK_LOOP:
 	for _, task := range tasks {
+		// 如果已经执行过了，就跳过
+		if _, ok := executedTaskTextMap[task.Text]; ok {
+			continue TASK_LOOP
+		}
 		taskResult := TaskResult{
 			Task: task,
 		}
@@ -637,6 +646,8 @@ func extractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
 		if task.Server == "" || task.Tool == "" {
 			continue
 		}
+
+		task.Text = taskJSON
 
 		tasks = append(tasks, task)
 	}

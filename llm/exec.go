@@ -124,7 +124,7 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 	// 提取任务
 	c.notifyExtractingTasks(ctx, state, "start")
 
-	roundTaskResults, err := c.processMCPTasksWithResults(ctx, state.currentGen, state.currentGen.MCPTaskTag)
+	roundTaskResults, err := c.processMCPTasksWithResults(ctx, state, state.currentGen.MCPTaskTag)
 	if err != nil {
 		return false, err
 	}
