@@ -224,7 +224,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 }
 
 // processMCPTasksWithResults 解析并执行任务，返回结果列表
-func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *ExecutionState, taskTag ...string) ([]TaskResult, error) {
+func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *ExecutionState, taskTag ...string) ([]MCPTask, []TaskResult, error) {
 	tag := MCP_DEFAULT_TASK_TAG
 	if len(taskTag) > 0 && taskTag[0] != "" {
 		tag = taskTag[0]
@@ -238,11 +238,11 @@ func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *Execu
 	}
 	tasks, err := c.ExtractMCPTasks(state.gen.Content, tag)
 	if err != nil {
-		return nil, err
+		return tasks, nil, err
 	}
 
 	if len(tasks) == 0 {
-		return nil, nil
+		return tasks, nil, nil
 	}
 
 	var results []TaskResult
@@ -268,7 +268,7 @@ TASK_LOOP:
 		results = append(results, taskResult)
 	}
 
-	return results, nil
+	return tasks, results, nil
 }
 
 // ExecuteMCPTasksWithResults 执行文本中提取的MCP任务并返回结果列表
