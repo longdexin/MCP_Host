@@ -229,14 +229,14 @@ func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *Execu
 	if len(taskTag) > 0 && taskTag[0] != "" {
 		tag = taskTag[0]
 	}
-	if state.gen.MCPTaskTag != "" {
-		tag = state.gen.MCPTaskTag
+	if state.currentGen.MCPTaskTag != "" {
+		tag = state.currentGen.MCPTaskTag
 	}
 	executedTaskTextMap := make(map[string]struct{}, len(state.allTaskResults))
 	for _, taskResult := range state.allTaskResults {
 		executedTaskTextMap[taskResult.Task.Text] = struct{}{}
 	}
-	tasks, err := c.ExtractMCPTasks(state.gen.Content, tag)
+	tasks, err := c.ExtractMCPTasks(state.currentGen.Content, tag)
 	if err != nil {
 		return tasks, nil, err
 	}
