@@ -43,7 +43,7 @@ type GenerateOptions struct {
 
 	StateNotifyFunc StateNotifyFunc `json:"-"` // 状态通知回调
 
-	RepetitionLimit int // 流式生成时，内容重复次数限制，若超出次数，则从循环break
+	RepetitionLimit int `json:"-"` // 流式生成时，内容重复次数限制，若超出次数，则从循环break
 }
 
 // Tool 模型可以使用的工具
