@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 
@@ -255,6 +256,11 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 		GenerationInfo: make(map[string]any),
 	}
 
+	repetitionCount, repetitionLimit := 0, opts.RepetitionLimit
+	if repetitionLimit < 1 {
+		repetitionLimit = math.MaxInt
+	}
+	previousContent := ""
 	for {
 		resp, err := stream.Recv()
 		if errors.Is(err, context.Canceled) {
@@ -281,7 +287,20 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 			gen.Role = choice.Delta.Role
 		}
 
-		gen.Content += choice.Delta.Content
+		currentContent := choice.Delta.Content
+
+		if currentContent != previousContent {
+			repetitionCount = 0
+			previousContent = currentContent
+		} else {
+			repetitionCount++
+		}
+
+		if repetitionCount >= repetitionLimit {
+			break
+		}
+
+		gen.Content += currentContent
 
 		if choice.FinishReason != "" {
 			gen.StopReason = string(choice.FinishReason)
@@ -293,8 +312,8 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 		}
 
 		// 调用流式回调
-		if opts.StreamingFunc != nil && choice.Delta.Content != "" {
-			if err := opts.StreamingFunc(ctx, []byte(choice.Delta.Content)); err != nil {
+		if opts.StreamingFunc != nil && currentContent != "" {
+			if err := opts.StreamingFunc(ctx, []byte(currentContent)); err != nil {
 				return gen, fmt.Errorf("streaming function returned error: %w", err)
 			}
 		}
