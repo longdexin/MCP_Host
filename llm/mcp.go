@@ -257,7 +257,6 @@ TASK_LOOP:
 		taskResult := TaskResult{
 			Task: task,
 		}
-
 		result, err := c.host.ExecuteTool(ctx, task.Server, task.Tool, task.Args)
 		if err != nil {
 			taskResult.Error = err.Error()

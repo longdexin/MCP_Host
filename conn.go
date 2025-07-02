@@ -17,6 +17,8 @@ import (
 type ServerConnection struct {
 	Client       *client.Client
 	ServerID     string
+	Options      []transport.ClientOption
+	BaseURL      string
 	ServerInfo   *mcp.InitializeResult
 	Capabilities mcp.ServerCapabilities
 	Connected    bool
@@ -70,6 +72,8 @@ func (h *MCPHost) ConnectSSE(ctx context.Context, serverID string, baseURL strin
 	conn := &ServerConnection{
 		Client:       c,
 		ServerID:     serverID,
+		Options:      options,
+		BaseURL:      baseURL,
 		ServerInfo:   serverInfo,
 		Capabilities: serverInfo.Capabilities,
 		Connected:    true,
@@ -259,7 +263,14 @@ func (h *MCPHost) ExecuteTool(ctx context.Context, serverID string, toolName str
 	if !exists {
 		return nil, fmt.Errorf("no connection found with ID %s", serverID)
 	}
-
+	err := conn.Client.Ping(ctx)
+	if err != nil {
+		h.DisconnectServer(serverID)
+		_, err := h.ConnectSSE(ctx, conn.ServerID, conn.BaseURL, conn.Options...)
+		if err != nil {
+			return nil, fmt.Errorf("can not reconnect with ID %s", serverID)
+		}
+	}
 	request := mcp.CallToolRequest{}
 	request.Params.Name = toolName
 	request.Params.Arguments = args
