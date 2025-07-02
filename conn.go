@@ -13,8 +13,17 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+type ConnectionType string
+
+const (
+	SSEConnectionType       ConnectionType = "SSE"
+	StdioConnectionType     ConnectionType = "Stdio"
+	InProcessConnectionType ConnectionType = "InProcess"
+)
+
 // ServerConnection  到单个MCP服务器的连接
 type ServerConnection struct {
+	Type         ConnectionType
 	Client       *client.Client
 	ServerID     string
 	Options      []transport.ClientOption
@@ -70,6 +79,7 @@ func (h *MCPHost) ConnectSSE(ctx context.Context, serverID string, baseURL strin
 	}
 
 	conn := &ServerConnection{
+		Type:         SSEConnectionType,
 		Client:       c,
 		ServerID:     serverID,
 		Options:      options,
@@ -115,6 +125,7 @@ func (h *MCPHost) ConnectStdio(ctx context.Context, serverID string, command str
 	}
 
 	conn := &ServerConnection{
+		Type:         StdioConnectionType,
 		Client:       c,
 		ServerID:     serverID,
 		ServerInfo:   serverInfo,
@@ -162,6 +173,7 @@ func (h *MCPHost) ConnectInProcess(ctx context.Context, serverID string, server 
 	}
 
 	conn := &ServerConnection{
+		Type:         InProcessConnectionType,
 		Client:       c,
 		ServerID:     serverID,
 		ServerInfo:   serverInfo,
@@ -255,8 +267,7 @@ func (h *MCPHost) SetGlobalNotificationHandler(handler func(serverID string, not
 	}
 }
 
-// ExecuteTool 在指定服务器上执行工具
-func (h *MCPHost) ExecuteTool(ctx context.Context, serverID string, toolName string, args map[string]any) (*mcp.CallToolResult, error) {
+func (h *MCPHost) EnsureConnection(ctx context.Context, serverID string) (*ServerConnection, error) {
 	h.mutex.RLock()
 	conn, exists := h.connections[serverID]
 	h.mutex.RUnlock()
@@ -266,61 +277,57 @@ func (h *MCPHost) ExecuteTool(ctx context.Context, serverID string, toolName str
 	err := conn.Client.Ping(ctx)
 	if err != nil {
 		h.DisconnectServer(serverID)
-		_, err := h.ConnectSSE(ctx, conn.ServerID, conn.BaseURL, conn.Options...)
-		if err != nil {
-			return nil, fmt.Errorf("can not reconnect with ID %s", serverID)
+		switch conn.Type {
+		case SSEConnectionType:
+			conn, err = h.ConnectSSE(ctx, conn.ServerID, conn.BaseURL, conn.Options...)
+			if err != nil {
+				return nil, fmt.Errorf("can not reconnect with ID %s", serverID)
+			}
+		default:
 		}
-		h.mutex.RLock()
-		conn, exists = h.connections[serverID]
-		h.mutex.RUnlock()
-		if !exists {
-			return nil, fmt.Errorf("no connection found with ID %s", serverID)
-		}
+	}
+	return conn, nil
+}
+
+// ExecuteTool 在指定服务器上执行工具
+func (h *MCPHost) ExecuteTool(ctx context.Context, serverID string, toolName string, args map[string]any) (*mcp.CallToolResult, error) {
+	conn, err := h.EnsureConnection(ctx, serverID)
+	if err != nil {
+		return nil, err
 	}
 	request := mcp.CallToolRequest{}
 	request.Params.Name = toolName
 	request.Params.Arguments = args
-
 	return conn.Client.CallTool(ctx, request)
 }
 
 // ListTools 列出指定服务器上的所有工具
 func (h *MCPHost) ListTools(ctx context.Context, serverID string) (*mcp.ListToolsResult, error) {
-	h.mutex.RLock()
-	conn, exists := h.connections[serverID]
-	h.mutex.RUnlock()
-	if !exists {
-		return nil, fmt.Errorf("no connection found with ID %s", serverID)
+	conn, err := h.EnsureConnection(ctx, serverID)
+	if err != nil {
+		return nil, err
 	}
-
 	request := mcp.ListToolsRequest{}
 	return conn.Client.ListTools(ctx, request)
 }
 
 // ListResources 列出指定服务器上的所有资源
 func (h *MCPHost) ListResources(ctx context.Context, serverID string) (*mcp.ListResourcesResult, error) {
-	h.mutex.RLock()
-	conn, exists := h.connections[serverID]
-	h.mutex.RUnlock()
-	if !exists {
-		return nil, fmt.Errorf("no connection found with ID %s", serverID)
+	conn, err := h.EnsureConnection(ctx, serverID)
+	if err != nil {
+		return nil, err
 	}
-
 	request := mcp.ListResourcesRequest{}
 	return conn.Client.ListResources(ctx, request)
 }
 
 // ReadResource 从指定服务器读取资源
 func (h *MCPHost) ReadResource(ctx context.Context, serverID string, uri string) (*mcp.ReadResourceResult, error) {
-	h.mutex.RLock()
-	conn, exists := h.connections[serverID]
-	h.mutex.RUnlock()
-	if !exists {
-		return nil, fmt.Errorf("no connection found with ID %s", serverID)
+	conn, err := h.EnsureConnection(ctx, serverID)
+	if err != nil {
+		return nil, err
 	}
-
 	request := mcp.ReadResourceRequest{}
 	request.Params.URI = uri
-
 	return conn.Client.ReadResource(ctx, request)
 }
