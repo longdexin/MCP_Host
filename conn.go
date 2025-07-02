@@ -270,6 +270,12 @@ func (h *MCPHost) ExecuteTool(ctx context.Context, serverID string, toolName str
 		if err != nil {
 			return nil, fmt.Errorf("can not reconnect with ID %s", serverID)
 		}
+		h.mutex.RLock()
+		conn, exists = h.connections[serverID]
+		h.mutex.RUnlock()
+		if !exists {
+			return nil, fmt.Errorf("no connection found with ID %s", serverID)
+		}
 	}
 	request := mcp.CallToolRequest{}
 	request.Params.Name = toolName
