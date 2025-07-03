@@ -541,7 +541,16 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 							if t, ok := paramDetails["type"].(string); ok {
 								paramType = t
 							}
-							builder.WriteString(fmt.Sprintf("      - %s (%s): %s\n", paramName, paramType, paramDesc))
+							if paramType == "array" {
+								if t, ok := paramDetails["items"].(map[string]any); ok {
+									if t, ok := t["type"].(string); ok {
+										paramType = fmt.Sprintf("%s<%s>", paramType, t)
+									}
+								}
+								builder.WriteString(fmt.Sprintf("  - %s: %s, %s\n", paramName, paramType, paramDesc))
+							} else {
+								builder.WriteString(fmt.Sprintf("  - %s: %s, %s\n", paramName, paramType, paramDesc))
+							}
 						}
 					}
 				}
