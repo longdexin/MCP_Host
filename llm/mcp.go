@@ -32,6 +32,10 @@ type MCPClient struct {
 	prompt                   string            // 默认提示
 	toolErrorMsgTemplate     string            // 工具错误消息模板
 	toolResultMsgTemplate    string            // 工具结果消息模板
+	nextRoundFlagTemplate    string            // 下一轮分析标识模板
+	nextRoundMsgTemplate     string            // 下一轮分析消息模板
+	finalResultMsgTemplate   string            // 最终答案消息模板
+	userQuestionTemplate     string            // 用户问题模板
 	functionCallSystemPrompt string            // 函数调用模式的系统提示
 }
 
@@ -43,6 +47,10 @@ func NewMCPClient(llm LLM, host *MCP_Host.MCPHost) *MCPClient {
 		prompt:                   defaultMCPPrompt,
 		toolErrorMsgTemplate:     defaultToolErrorMessageTemplate,
 		toolResultMsgTemplate:    defaultToolResultMessageTemplate,
+		nextRoundFlagTemplate:    defaultNextRoundFlagTemplate,
+		nextRoundMsgTemplate:     defaultNextRoundMsgTemplate,
+		finalResultMsgTemplate:   defaultFinalResultMsgTemplate,
+		userQuestionTemplate:     defaultUserQuestionTemplate,
 		functionCallSystemPrompt: defaultFunctionCallSystemPrompt,
 	}
 }
@@ -60,6 +68,26 @@ func (c *MCPClient) SetToolErrorMessageTemplate(template string) {
 // SetToolResultMessageTemplate 设置工具结果消息模板
 func (c *MCPClient) SetToolResultMessageTemplate(template string) {
 	c.toolResultMsgTemplate = template
+}
+
+// SetNextRoundFlagTemplate 设置下一轮标识模板
+func (c *MCPClient) SetNextRoundFlagTemplate(template string) {
+	c.nextRoundFlagTemplate = template
+}
+
+// SetNextRoundMsgTemplate 设置下一轮消息模板
+func (c *MCPClient) SetNextRoundMsgTemplate(template string) {
+	c.nextRoundMsgTemplate = template
+}
+
+// SetFinalResultMsgTemplate 设置最终结果消息模板
+func (c *MCPClient) SetFinalResultMsgTemplate(template string) {
+	c.finalResultMsgTemplate = template
+}
+
+// SetUserQuestionTemplate 设置用户问题模板
+func (c *MCPClient) SetUserQuestionTemplate(template string) {
+	c.userQuestionTemplate = template
 }
 
 // SetFunctionCallSystemPrompt 设置函数调用模式的系统提示
@@ -239,6 +267,12 @@ func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *Execu
 	tasks, err := c.ExtractMCPTasks(state.currentGen.Content, tag)
 	if err != nil {
 		return tasks, nil, err
+	}
+	// 提取除MCPTask外的生成内容，若生成内容不为空，认为不需要继续执行MCPTask，清空tasks
+	re := taskRegex(state.gen.MCPTaskTag)
+	remainingContent := strings.TrimSpace(re.ReplaceAllString(state.currentGen.Content, ""))
+	if remainingContent == "" {
+		tasks = tasks[:0]
 	}
 
 	if len(tasks) == 0 {

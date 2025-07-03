@@ -83,7 +83,14 @@ func (c *MCPClient) executeToolsLoop(ctx context.Context, state *ExecutionState)
 			return err
 		}
 
-		if !hasExecutedTools || state.executionRound >= maxRounds {
+		if !hasExecutedTools {
+			break
+		}
+
+		if state.executionRound >= maxRounds {
+			if err := c.getFinalResult(ctx, state); err != nil {
+				return err
+			}
 			break
 		}
 
@@ -384,7 +391,31 @@ func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState)
 	nextGen.MCPPrompt = state.gen.MCPPrompt
 	state.currentGen = nextGen
 
-	state.capturedOutput.WriteString("\n\n--- Continuing Analysis (Round " + fmt.Sprintf("%d", state.executionRound) + ") ---\n\n")
+	state.capturedOutput.WriteString("\n\n--- " + fmt.Sprintf(c.nextRoundFlagTemplate, state.executionRound) + "---\n\n")
+	state.capturedOutput.WriteString(nextGen.Content)
+
+	return nil
+}
+
+func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) error {
+	intermediateMessages := c.buildFinalResultMessages(ctx, state)
+
+	c.notifyIntermediateGeneration(ctx, state, "start")
+	intermediateOpts := c.createIntermediateOptions(state)
+
+	nextGen, err := c.llm.GenerateContent(ctx, intermediateMessages, intermediateOpts...)
+	if err != nil {
+		c.notifyIntermediateGenerationError(ctx, state, err)
+		return err
+	}
+
+	c.notifyIntermediateGeneration(ctx, state, "complete")
+	nextGen.MCPWorkMode = state.gen.MCPWorkMode
+	nextGen.MCPTaskTag = state.gen.MCPTaskTag
+	nextGen.MCPResultTag = state.gen.MCPResultTag
+	nextGen.MCPPrompt = state.gen.MCPPrompt
+	state.currentGen = nextGen
+
 	state.capturedOutput.WriteString(nextGen.Content)
 
 	return nil
@@ -396,6 +427,15 @@ func (c *MCPClient) buildIntermediateMessages(ctx context.Context, state *Execut
 		return c.buildTextModeIntermediateMessages(ctx, state)
 	} else {
 		return c.buildFunctionCallIntermediateMessages(state)
+	}
+}
+
+// buildIntermediateMessages 构建中间消息
+func (c *MCPClient) buildFinalResultMessages(ctx context.Context, state *ExecutionState) []Message {
+	if state.currentGen.MCPWorkMode == TextMode {
+		return c.buildTextModeFinalResultMessages(ctx, state)
+	} else {
+		return c.buildFunctionCallFinalResultMessages(state)
 	}
 }
 
@@ -427,7 +467,42 @@ func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state
 	// 添加额外指导
 	remainingRounds := state.opts.MCPMaxToolExecutionRounds - state.executionRound
 	if remainingRounds > 0 {
-		guidanceMsg := fmt.Sprintf("Based on these results, you can use additional tools if needed (up to %d more rounds). Please continue your analysis.", remainingRounds)
+		guidanceMsg := fmt.Sprintf(c.nextRoundMsgTemplate, remainingRounds)
+		messages = append(messages, *NewUserMessage("", guidanceMsg))
+	}
+
+	return messages
+}
+
+// buildTextModeIntermediateMessages 构建文本模式中间消息
+func (c *MCPClient) buildTextModeFinalResultMessages(ctx context.Context, state *ExecutionState) []Message {
+	var messages []Message
+
+	systemMsg := NewSystemMessage("", state.currentGen.MCPPrompt)
+	toolsInfo := c.formatMCPToolsAsText(ctx, state.currentGen.MCPTaskTag, state.opts.MCPDisabledTools...)
+	if toolsInfo != "" {
+		systemMsg.Content += "\n\n" + toolsInfo
+	}
+	messages = append(messages, *systemMsg)
+	messages = append(messages, *NewUserMessage("", state.prompt))
+
+	// 添加工具结果
+	for _, result := range state.allTaskResults {
+		var toolMsg string
+		if result.Error != "" {
+			toolMsg = fmt.Sprintf(c.toolErrorMsgTemplate, result.Task.Server, result.Task.Tool, result.Error)
+		} else {
+			resultJSON, _ := json.Marshal(result.Result)
+			toolMsg = fmt.Sprintf(c.toolResultMsgTemplate, result.Task.Server, result.Task.Tool, string(resultJSON))
+		}
+
+		messages = append(messages, *NewUserMessage("", toolMsg))
+	}
+
+	// 添加额外指导
+	remainingRounds := state.opts.MCPMaxToolExecutionRounds - state.executionRound
+	if remainingRounds > 0 {
+		guidanceMsg := c.finalResultMsgTemplate
 		messages = append(messages, *NewUserMessage("", guidanceMsg))
 	}
 
@@ -439,7 +514,7 @@ func (c *MCPClient) buildFunctionCallIntermediateMessages(state *ExecutionState)
 	var messages []Message
 	systemMsg := NewSystemMessage("", c.functionCallSystemPrompt)
 	messages = append(messages, *systemMsg)
-	messages = append(messages, *NewUserMessage("", "[User Question]: "+state.prompt))
+	messages = append(messages, *NewUserMessage("", c.userQuestionTemplate+state.prompt))
 	assistantMsg := NewAssistantMessage("", "", state.currentGen.ToolCalls)
 	messages = append(messages, *assistantMsg)
 
@@ -462,6 +537,40 @@ func (c *MCPClient) buildFunctionCallIntermediateMessages(state *ExecutionState)
 	remainingRounds := state.opts.MCPMaxToolExecutionRounds - state.executionRound
 	if remainingRounds > 0 {
 		guidanceMsg := fmt.Sprintf("You can call additional tools if needed (up to %d more rounds). Please continue your analysis.", remainingRounds)
+		messages = append(messages, *NewUserMessage("", guidanceMsg))
+	}
+
+	return messages
+}
+
+// buildFunctionCallFinalMessages 构建函数调用模式最终消息
+func (c *MCPClient) buildFunctionCallFinalResultMessages(state *ExecutionState) []Message {
+	var messages []Message
+	systemMsg := NewSystemMessage("", c.functionCallSystemPrompt)
+	messages = append(messages, *systemMsg)
+	messages = append(messages, *NewUserMessage("", c.userQuestionTemplate+state.prompt))
+	assistantMsg := NewAssistantMessage("", "", state.currentGen.ToolCalls)
+	messages = append(messages, *assistantMsg)
+
+	// 添加工具结果
+	for _, call := range state.currentGen.ToolCalls {
+		var resultContent string
+		if errStr, ok := state.currentGen.GenerationInfo["tool_error_"+call.ID].(string); ok && errStr != "" {
+			resultContent = fmt.Sprintf("Error: %s", errStr)
+		} else if result, ok := state.currentGen.GenerationInfo["tool_result_"+call.ID]; ok {
+			resultJSON, _ := json.Marshal(result)
+			resultContent = string(resultJSON)
+		} else {
+			continue
+		}
+
+		messages = append(messages, *NewToolMessage(call.ID, resultContent))
+	}
+
+	// 添加额外指导
+	remainingRounds := state.opts.MCPMaxToolExecutionRounds - state.executionRound
+	if remainingRounds > 0 {
+		guidanceMsg := c.finalResultMsgTemplate
 		messages = append(messages, *NewUserMessage("", guidanceMsg))
 	}
 

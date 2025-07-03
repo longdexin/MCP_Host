@@ -41,3 +41,15 @@ const defaultToolResultMessageTemplate = `I have used tool %s.%s to get the foll
 
 // 函数调用模式下的系统提示
 const defaultFunctionCallSystemPrompt = `You are an AI assistant that can use tools in a multi-step process to help users solve complex problems. After receiving tool results, carefully analyze them to determine if additional tools need to be called. Please provide a complete response based on all tool call results.`
+
+// 下一轮分析标识模板
+const defaultNextRoundFlagTemplate = `Continuing Analysis (Round "%d")`
+
+// 下一轮分析消息模板
+const defaultNextRoundMsgTemplate = "Based on these results, you can use additional tools if needed (up to %d more rounds). Please continue your analysis."
+
+// 最终答案消息模板
+const defaultFinalResultMsgTemplate = `Based on these results, use no more tools and give me the final answer.`
+
+// 用户问题模板
+const defaultUserQuestionTemplate = "[User Question]: "
