@@ -276,7 +276,7 @@ func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *Execu
 		remainingContent = state.currentGen.Content[lastIndex+8:]
 	}
 	remainingContent = strings.TrimSpace(re.ReplaceAllString(remainingContent, ""))
-	if remainingContent == "" {
+	if remainingContent != "" {
 		tasks = tasks[:0]
 	}
 
