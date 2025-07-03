@@ -500,11 +500,8 @@ func (c *MCPClient) buildTextModeFinalResultMessages(ctx context.Context, state 
 	}
 
 	// 添加额外指导
-	remainingRounds := state.opts.MCPMaxToolExecutionRounds - state.executionRound
-	if remainingRounds > 0 {
-		guidanceMsg := c.finalResultMsgTemplate
-		messages = append(messages, *NewUserMessage("", guidanceMsg))
-	}
+	guidanceMsg := c.finalResultMsgTemplate
+	messages = append(messages, *NewUserMessage("", guidanceMsg))
 
 	return messages
 }
@@ -568,11 +565,8 @@ func (c *MCPClient) buildFunctionCallFinalResultMessages(state *ExecutionState) 
 	}
 
 	// 添加额外指导
-	remainingRounds := state.opts.MCPMaxToolExecutionRounds - state.executionRound
-	if remainingRounds > 0 {
-		guidanceMsg := c.finalResultMsgTemplate
-		messages = append(messages, *NewUserMessage("", guidanceMsg))
-	}
+	guidanceMsg := c.finalResultMsgTemplate
+	messages = append(messages, *NewUserMessage("", guidanceMsg))
 
 	return messages
 }
