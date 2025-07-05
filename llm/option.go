@@ -28,6 +28,7 @@ type GenerateOptions struct {
 	ParallelToolCalls      *bool                                         `json:"parallel_tool_calls,omitempty"` // 是否启用并行工具调用
 	ToolChoice             any                                           `json:"tool_choice"`                   // 工具选择
 	Metadata               map[string]string                             `json:"metadata,omitempty"`            // 请求的元数据
+	ChatTemplateKwargs     map[string]any                                `json:"chat_template_kwargs"`          // 模板参数
 	ResponseMIMEType       string                                        `json:"response_mime_type,omitempty"`  // 响应MIME类型
 	LogProbs               bool                                          `json:"logprobs,omitempty"`            // 是否记录概率
 	TopLogProbs            int                                           `json:"top_logprobs,omitempty"`        // 返回每个位置最可能的令牌数量

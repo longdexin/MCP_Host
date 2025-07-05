@@ -151,11 +151,12 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 		// StreamOptions: &openai.StreamOptions{
 		// 	IncludeUsage: true,
 		// },
-		ToolChoice:  opts.ToolChoice,
-		LogProbs:    opts.LogProbs,
-		TopLogProbs: opts.TopLogProbs,
-		Seed:        &opts.Seed,
-		Metadata:    opts.Metadata,
+		ToolChoice:         opts.ToolChoice,
+		LogProbs:           opts.LogProbs,
+		TopLogProbs:        opts.TopLogProbs,
+		Seed:               &opts.Seed,
+		Metadata:           opts.Metadata,
+		ChatTemplateKwargs: opts.ChatTemplateKwargs,
 	}
 
 	if opts.StreamingFunc != nil {
