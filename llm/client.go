@@ -8,6 +8,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -290,15 +291,16 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 
 		currentContent := choice.Delta.Content
 
-		if currentContent != previousContent {
-			repetitionCount = 0
-			previousContent = currentContent
-		} else {
-			repetitionCount++
-		}
-
-		if repetitionCount >= repetitionLimit {
-			break
+		if strings.TrimSpace(currentContent) != "" {
+			if currentContent != previousContent {
+				repetitionCount = 0
+				previousContent = currentContent
+			} else {
+				repetitionCount++
+			}
+			if repetitionCount >= repetitionLimit {
+				break
+			}
 		}
 
 		gen.Content += currentContent
