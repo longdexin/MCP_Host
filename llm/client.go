@@ -263,6 +263,7 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 		repetitionLimit = math.MaxInt
 	}
 	previousContent := ""
+	isReasonningContent := false
 	for {
 		resp, err := stream.Recv()
 		if errors.Is(err, context.Canceled) {
@@ -289,7 +290,17 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 			gen.Role = choice.Delta.Role
 		}
 
-		currentContent := choice.Delta.Content
+		currentContent, currentReasoningContent := choice.Delta.Content, choice.Delta.ReasoningContent
+		if currentReasoningContent != "" && !isReasonningContent {
+			isReasonningContent = true
+			currentReasoningContent = fmt.Sprintf("<think>\n%s", currentReasoningContent)
+		}
+		if currentContent != "" {
+			currentReasoningContent = fmt.Sprintf("%s\n</think>", currentReasoningContent)
+			isReasonningContent = false
+		}
+
+		currentContent = currentReasoningContent + currentContent
 
 		if strings.TrimSpace(currentContent) != "" {
 			if currentContent != previousContent {
