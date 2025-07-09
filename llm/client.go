@@ -293,11 +293,11 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 		currentContent, currentReasoningContent := choice.Delta.Content, choice.Delta.ReasoningContent
 		if currentReasoningContent != "" && !isReasonningContent {
 			isReasonningContent = true
-			currentReasoningContent = fmt.Sprintf("<think>\n%s", currentReasoningContent)
+			currentReasoningContent = fmt.Sprintf("<think>%s", currentReasoningContent)
 		}
 		if currentContent != "" && isReasonningContent {
 			isReasonningContent = false
-			currentReasoningContent = fmt.Sprintf("%s\n</think>", currentReasoningContent)
+			currentReasoningContent = fmt.Sprintf("%s</think>", currentReasoningContent)
 		}
 
 		currentContent = currentReasoningContent + currentContent
