@@ -568,14 +568,14 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 		return ""
 	}
 
-	builder.WriteString("Please follow the format below to call the tool:\n")
-	builder.WriteString(fmt.Sprintf("<%s>\n", taskTag))
-	builder.WriteString("{\n")
-	builder.WriteString("  \"server\": \"Server ID\",\n")
-	builder.WriteString("  \"tool\": \"Tool Name\",\n")
-	builder.WriteString("  \"args\": {\"arg1\": \"value1\",\n")
-	builder.WriteString("}\n")
-	builder.WriteString(fmt.Sprintf("</%s>\n", taskTag))
+	// builder.WriteString("Please follow the format below to call the tool:\n")
+	// builder.WriteString(fmt.Sprintf("<%s>\n", taskTag))
+	// builder.WriteString("{\n")
+	// builder.WriteString("  \"server\": \"Server ID\",\n")
+	// builder.WriteString("  \"tool\": \"Tool Name\",\n")
+	// builder.WriteString("  \"args\": {\"arg1\": \"value1\"}\n")
+	// builder.WriteString("}\n")
+	// builder.WriteString(fmt.Sprintf("</%s>\n", taskTag))
 
 	return builder.String()
 }
