@@ -534,6 +534,7 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 
 				if len(properties) > 0 {
 					builder.WriteString("    Parameters:\n")
+					paramLines := make([]string, 0, len(properties))
 					for paramName, paramInfo := range properties {
 						paramDesc := ""
 						paramType := ""
@@ -551,12 +552,14 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 										paramType = fmt.Sprintf("%s<%s>", paramType, t)
 									}
 								}
-								builder.WriteString(fmt.Sprintf("      - %s: %s, %s\n", paramName, paramType, paramDesc))
+								paramLines = append(paramLines, fmt.Sprintf("      - %s: %s, %s", paramName, paramType, paramDesc))
 							} else {
-								builder.WriteString(fmt.Sprintf("      - %s: %s, %s\n", paramName, paramType, paramDesc))
+								paramLines = append(paramLines, fmt.Sprintf("      - %s: %s, %s", paramName, paramType, paramDesc))
 							}
 						}
 					}
+					slices.Sort(paramLines)
+					builder.WriteString(strings.Join(paramLines, "\n"))
 				}
 				builder.WriteString("\n")
 			}
