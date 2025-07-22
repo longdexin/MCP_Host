@@ -21,7 +21,7 @@ const (
 )
 
 // 流式输出回调函数
-func streamHandler(ctx context.Context, chunk []byte) error {
+func streamHandler(ctx context.Context, chunk []byte, toolResults []llm.MCPToolExecutionResult) error {
 	fmt.Print(string(chunk))
 	return nil
 }

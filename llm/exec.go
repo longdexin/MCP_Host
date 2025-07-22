@@ -206,32 +206,17 @@ func (c *MCPClient) notifyProcessingToolCalls(ctx context.Context, state *Execut
 
 // streamTextModeResults 流式输出文本模式结果
 func (c *MCPClient) streamTextModeResults(ctx context.Context, state *ExecutionState, results []TaskResult) {
-	// 添加换行
-	state.capturedOutput.WriteString("\n")
-	_ = state.opts.StreamingFunc(ctx, []byte("\n"))
-
+	resultInfos := make([]MCPToolExecutionResult, 0, len(results))
 	for _, result := range results {
 		c.notifyToolCall(ctx, state, result.Task.Server, result.Task.Tool, "start", result.Task.Args)
-
-		// 构建结果输出
-		var resultOutput strings.Builder
-		resultOutput.WriteString(fmt.Sprintf("<%s>\n", state.currentGen.MCPResultTag))
 		resultInfo := c.createToolExecutionResult(result)
-		resultJSON, _ := json.Marshal(resultInfo)
-		resultOutput.WriteString(string(resultJSON))
-		resultOutput.WriteString("\n")
-		resultOutput.WriteString(fmt.Sprintf("</%s>\n", state.currentGen.MCPResultTag))
+		resultInfos = append(resultInfos, resultInfo)
 		c.notifyToolResult(ctx, state, result)
-
-		// 写入输出并流式传输
-		resultStr := resultOutput.String()
-		state.capturedOutput.WriteString(resultStr)
-		_ = state.opts.StreamingFunc(ctx, []byte(resultStr))
 	}
-
-	separatorStr := "\n\n"
-	state.capturedOutput.WriteString(separatorStr)
-	_ = state.opts.StreamingFunc(ctx, []byte(separatorStr))
+	if len(resultInfos) > 0 {
+		state.capturedOutput.WriteString(fmt.Sprintf("<%s>", state.currentGen.MCPResultTag))
+		_ = state.opts.StreamingFunc(ctx, nil, resultInfos)
+	}
 }
 
 // createToolExecutionResult 创建工具执行结果
@@ -255,12 +240,7 @@ func (c *MCPClient) createToolExecutionResult(result TaskResult) MCPToolExecutio
 
 // streamFunctionCallResults 流式输出函数调用结果
 func (c *MCPClient) streamFunctionCallResults(ctx context.Context, state *ExecutionState) {
-	state.capturedOutput.WriteString("\n")
-	_ = state.opts.StreamingFunc(ctx, []byte("\n"))
-
-	resultOutput := strings.Builder{}
-	resultOutput.WriteString(fmt.Sprintf("<%s>\n", state.currentGen.MCPResultTag))
-
+	resultInfos := make([]MCPToolExecutionResult, 0, len(state.currentGen.ToolCalls))
 	for _, call := range state.currentGen.ToolCalls {
 		serverID, toolName, args := c.parseToolCall(call)
 		c.notifyToolCall(ctx, state, serverID, toolName, "start", map[string]any{"call_id": call.ID})
@@ -270,22 +250,15 @@ func (c *MCPClient) streamFunctionCallResults(ctx context.Context, state *Execut
 			Args:   args,
 			ID:     call.ID,
 		}
+		resultInfos = append(resultInfos, resultInfo)
 		c.fillToolCallResult(state.currentGen, &resultInfo)
 		c.notifyFunctionCallResult(ctx, state, resultInfo)
-		resultJSON, _ := json.Marshal(resultInfo)
-		resultOutput.WriteString(string(resultJSON))
-		resultOutput.WriteString("\n")
 	}
 
-	resultOutput.WriteString(fmt.Sprintf("</%s>\n", state.currentGen.MCPResultTag))
-	resultStr := resultOutput.String()
-	state.capturedOutput.WriteString(resultStr)
-	_ = state.opts.StreamingFunc(ctx, []byte(resultStr))
-
-	// 添加分隔符
-	separatorStr := "\n\n"
-	state.capturedOutput.WriteString(separatorStr)
-	_ = state.opts.StreamingFunc(ctx, []byte(separatorStr))
+	if len(resultInfos) > 0 {
+		state.capturedOutput.WriteString(fmt.Sprintf("<%s>", state.currentGen.MCPResultTag))
+		_ = state.opts.StreamingFunc(ctx, nil, resultInfos)
+	}
 }
 
 // parseToolCall 解析工具调用
@@ -603,9 +576,9 @@ func (c *MCPClient) createIntermediateOptions(state *ExecutionState) []GenerateO
 	}
 
 	if state.opts.StreamingFunc != nil {
-		intermediateStreamFunc := func(ctx context.Context, chunk []byte) error {
+		intermediateStreamFunc := func(ctx context.Context, chunk []byte, toolResults []MCPToolExecutionResult) error {
 			state.capturedOutput.Write(chunk)
-			return state.opts.StreamingFunc(ctx, chunk)
+			return state.opts.StreamingFunc(ctx, chunk, nil)
 		}
 		intermediateOpts = append(intermediateOpts, WithStreamingFunc(intermediateStreamFunc))
 	}

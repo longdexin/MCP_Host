@@ -327,7 +327,7 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 
 		// 调用流式回调
 		if opts.StreamingFunc != nil && currentContent != "" {
-			if err := opts.StreamingFunc(ctx, []byte(currentContent)); err != nil {
+			if err := opts.StreamingFunc(ctx, []byte(currentContent), nil); err != nil {
 				return gen, fmt.Errorf("streaming function returned error: %w", err)
 			}
 		}
