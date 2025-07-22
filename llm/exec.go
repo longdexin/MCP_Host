@@ -214,7 +214,7 @@ func (c *MCPClient) streamTextModeResults(ctx context.Context, state *ExecutionS
 		c.notifyToolResult(ctx, state, result)
 	}
 	if len(resultInfos) > 0 {
-		state.capturedOutput.WriteString(fmt.Sprintf("<%s>", state.currentGen.MCPResultTag))
+		fmt.Fprintf(state.capturedOutput, "<%s>", state.currentGen.MCPResultTag)
 		_ = state.opts.StreamingFunc(ctx, nil, resultInfos)
 	}
 }
@@ -256,7 +256,7 @@ func (c *MCPClient) streamFunctionCallResults(ctx context.Context, state *Execut
 	}
 
 	if len(resultInfos) > 0 {
-		state.capturedOutput.WriteString(fmt.Sprintf("<%s>", state.currentGen.MCPResultTag))
+		fmt.Fprintf(state.capturedOutput, "<%s>", state.currentGen.MCPResultTag)
 		_ = state.opts.StreamingFunc(ctx, nil, resultInfos)
 	}
 }
