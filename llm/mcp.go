@@ -492,7 +492,19 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 	for serverID := range connections {
 		toolsResult, err := c.host.ListTools(ctx, serverID)
 		if err != nil {
-			continue
+			toolsResult, err = c.host.ListTools(ctx, serverID)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		}
+
+		if len(toolsResult.Tools) < 1 {
+			toolsResult, err = c.host.ListTools(ctx, serverID)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
 		}
 
 		serverHasTools := false
