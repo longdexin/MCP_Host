@@ -302,7 +302,7 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 
 		currentContent = currentReasoningContent + currentContent
 
-		if strings.TrimSpace(currentContent) != "" {
+		if strings.Contains(currentContent, "MCP_HOST_TASK") {
 			if currentContent != previousContent {
 				repetitionCount = 0
 				previousContent = currentContent
