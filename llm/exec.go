@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -145,10 +146,10 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 	state.allTaskResults = append(state.allTaskResults, roundTaskResults...)
 
 	if size := len(roundTaskResults); size > 0 {
-		all := make([]any, 0, size)
+		all := make([]mcp.Content, 0, size)
 		for i := range roundTaskResults {
-			if result, ok := roundTaskResults[i].Result.([]any); ok {
-				all = append(result, result...)
+			if result, ok := roundTaskResults[i].Result.([]mcp.Content); ok {
+				all = append(all, result...)
 			}
 		}
 		bs, err := json.Marshal(all)
@@ -402,8 +403,6 @@ func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) e
 	nextGen.MCPResultTag = state.gen.MCPResultTag
 	nextGen.MCPPrompt = state.gen.MCPPrompt
 	state.currentGen = nextGen
-
-	state.capturedOutput.WriteString(nextGen.Content)
 
 	return nil
 }
