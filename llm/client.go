@@ -217,6 +217,9 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 		Role:       choice.Message.Role,
 		Content:    choice.Message.Content,
 		StopReason: string(choice.FinishReason),
+		Messages: []openai.ChatCompletionMessage{
+			choice.Message,
+		},
 	}
 
 	// 处理工具调用

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/sashabaranov/go-openai"
 )
 
 // ExecutionState 存储执行状态
@@ -141,6 +143,20 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 		return false, nil
 	}
 	state.allTaskResults = append(state.allTaskResults, roundTaskResults...)
+
+	if size := len(roundTaskResults); size > 0 {
+		all := make([]any, 0, size)
+		for i := range roundTaskResults {
+			if result, ok := roundTaskResults[i].Result.([]any); ok {
+				all = append(result, result...)
+			}
+		}
+		bs, err := json.Marshal(all)
+		if err != nil {
+			return false, fmt.Errorf("json.Marshal(all) error:%v", err)
+		}
+		state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: fmt.Sprintf("<MCP_HOST_RESULT>%s</MCP_HOST_RESULT>", string(bs))})
+	}
 
 	// 输出结果
 	if state.opts.StreamingFunc != nil {
@@ -361,6 +377,8 @@ func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState)
 	nextGen.MCPTaskTag = state.gen.MCPTaskTag
 	nextGen.MCPResultTag = state.gen.MCPResultTag
 	nextGen.MCPPrompt = state.gen.MCPPrompt
+	state.gen.Messages = append(state.gen.Messages, nextGen.Messages...)
+	nextGen.Messages = state.gen.Messages
 	state.currentGen = nextGen
 
 	return nil

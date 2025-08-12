@@ -35,6 +35,7 @@ type Generation struct {
 	Content          string                                     `json:"content"`
 	StopReason       string                                     `json:"stop_reason"`
 	ReasoningContent string                                     `json:"reasoning_content,omitempty"`
+	Messages         []openai.ChatCompletionMessage             `json:"messages,omitempty"`
 	GenerationInfo   map[string]any                             `json:"generation_info,omitempty"`
 	ToolCalls        []ToolCall                                 `json:"tool_calls,omitempty"`
 	Usage            *Usage                                     `json:"usage,omitempty"`

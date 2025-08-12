@@ -753,6 +753,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 		MCPTaskTag:     state.gen.MCPTaskTag,
 		MCPResultTag:   state.gen.MCPResultTag,
 		MCPPrompt:      state.gen.MCPPrompt,
+		Messages:       state.gen.Messages,
 		GenerationInfo: make(map[string]any),
 	}
 
