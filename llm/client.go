@@ -342,7 +342,10 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 			gen.Usage.TotalTokens = resp.Usage.TotalTokens
 		}
 	}
-
+	gen.Messages = append(gen.Messages, openai.ChatCompletionMessage{
+		Role:    gen.Role,
+		Content: gen.Content,
+	})
 	return gen, nil
 }
 
