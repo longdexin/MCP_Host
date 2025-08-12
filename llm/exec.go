@@ -93,7 +93,6 @@ func (c *MCPClient) executeToolsLoop(ctx context.Context, state *ExecutionState)
 			}
 			break
 		}
-		fmt.Println("1", state.capturedOutput.String())
 		// 准备下一轮执行
 		if err := c.prepareNextRound(ctx, state); err != nil {
 			return err
@@ -363,9 +362,6 @@ func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState)
 	nextGen.MCPResultTag = state.gen.MCPResultTag
 	nextGen.MCPPrompt = state.gen.MCPPrompt
 	state.currentGen = nextGen
-	fmt.Println("2", state.capturedOutput.String())
-	// state.capturedOutput.WriteString("\n\n--- " + fmt.Sprintf(c.nextRoundFlagTemplate, state.executionRound) + "---\n\n")
-	// state.capturedOutput.WriteString(nextGen.Content)
 
 	return nil
 }
