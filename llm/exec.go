@@ -146,19 +146,26 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 	state.allTaskResults = append(state.allTaskResults, roundTaskResults...)
 
 	if size := len(roundTaskResults); size > 0 {
-		all := make([]string, 0, size)
+	RESULT_LOOP:
 		for i := range roundTaskResults {
+			if roundTaskResults[i].Error != "" {
+				content := fmt.Sprintf("<MCP_HOST_RESULT>%s.%s error: %s</MCP_HOST_RESULT>", roundTaskResults[i].Task.Server, roundTaskResults[i].Task.Tool, roundTaskResults[i].Error)
+				state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: content})
+				continue RESULT_LOOP
+			}
 			if result, ok := roundTaskResults[i].Result.([]mcp.Content); ok {
+				texts := make([]string, 0, len(result))
 				for j := range result {
 					switch content := result[j].(type) {
 					case mcp.TextContent:
-						all = append(all, content.Text)
+						texts = append(texts, content.Text)
 					default:
 					}
 				}
+				content := fmt.Sprintf("<MCP_HOST_RESULT>%s</MCP_HOST_RESULT>", strings.Join(texts, "\n\n"))
+				state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: content})
 			}
 		}
-		state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: fmt.Sprintf("<MCP_HOST_RESULT>%s</MCP_HOST_RESULT>", strings.Join(all, "\n\n"))})
 	}
 
 	// 输出结果
@@ -445,10 +452,19 @@ func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state
 		if result.Error != "" {
 			toolMsg = fmt.Sprintf(c.toolErrorMsgTemplate, result.Task.Server, result.Task.Tool, result.Error)
 		} else {
-			resultJSON, _ := json.Marshal(result.Result)
-			toolMsg = fmt.Sprintf(c.toolResultMsgTemplate, result.Task.Server, result.Task.Tool, string(resultJSON))
+			contents, ok := result.Result.([]mcp.Content)
+			if ok {
+				texts := make([]string, 0, len(contents))
+				for _, content := range contents {
+					switch content := content.(type) {
+					case mcp.TextContent:
+						texts = append(texts, content.Text)
+					default:
+					}
+				}
+				toolMsg = fmt.Sprintf(c.toolResultMsgTemplate, result.Task.Server, result.Task.Tool, strings.Join(texts, "\n\n"))
+			}
 		}
-
 		messages = append(messages, *NewUserMessage("", toolMsg))
 	}
 
@@ -480,8 +496,18 @@ func (c *MCPClient) buildTextModeFinalResultMessages(ctx context.Context, state 
 		if result.Error != "" {
 			toolMsg = fmt.Sprintf(c.toolErrorMsgTemplate, result.Task.Server, result.Task.Tool, result.Error)
 		} else {
-			resultJSON, _ := json.Marshal(result.Result)
-			toolMsg = fmt.Sprintf(c.toolResultMsgTemplate, result.Task.Server, result.Task.Tool, string(resultJSON))
+			contents, ok := result.Result.([]mcp.Content)
+			if ok {
+				texts := make([]string, 0, len(contents))
+				for _, content := range contents {
+					switch content := content.(type) {
+					case mcp.TextContent:
+						texts = append(texts, content.Text)
+					default:
+					}
+				}
+				toolMsg = fmt.Sprintf(c.toolResultMsgTemplate, result.Task.Server, result.Task.Tool, strings.Join(texts, "\n\n"))
+			}
 		}
 
 		messages = append(messages, *NewUserMessage("", toolMsg))
