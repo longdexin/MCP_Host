@@ -146,17 +146,19 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 	state.allTaskResults = append(state.allTaskResults, roundTaskResults...)
 
 	if size := len(roundTaskResults); size > 0 {
-		all := make([]mcp.Content, 0, size)
+		all := make([]string, 0, size)
 		for i := range roundTaskResults {
 			if result, ok := roundTaskResults[i].Result.([]mcp.Content); ok {
-				all = append(all, result...)
+				for j := range result {
+					switch content := result[j].(type) {
+					case mcp.TextContent:
+						all = append(all, content.Text)
+					default:
+					}
+				}
 			}
 		}
-		bs, err := json.Marshal(all)
-		if err != nil {
-			return false, fmt.Errorf("json.Marshal(all) error:%v", err)
-		}
-		state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: fmt.Sprintf("<MCP_HOST_RESULT>%s</MCP_HOST_RESULT>", string(bs))})
+		state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: fmt.Sprintf("<MCP_HOST_RESULT>%s</MCP_HOST_RESULT>", strings.Join(all, "\n\n"))})
 	}
 
 	// 输出结果

@@ -4,7 +4,7 @@ go 1.24.6
 
 require (
 	github.com/mark3labs/mcp-go v0.37.0
-	github.com/sashabaranov/go-openai v1.41.0
+	github.com/sashabaranov/go-openai v1.41.1
 )
 
 require (
