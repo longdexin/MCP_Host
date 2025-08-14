@@ -270,20 +270,6 @@ func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *Execu
 		return tasks, nil, err
 	}
 
-	if state.executionRound > 1 && slices.ContainsFunc(state.allTaskResults, func(e TaskResult) bool { return e.Result != nil }) {
-		// 提取除MCPTask外的生成内容，若生成内容不为空，认为不需要继续执行MCPTask，清空tasks
-		remainingContent := ""
-		re := taskRegex(state.gen.MCPTaskTag)
-		// 只需要最后一个</think>标签后的文本
-		if lastIndex := strings.LastIndex(state.currentGen.Content, "</think>"); lastIndex >= 0 {
-			remainingContent = state.currentGen.Content[lastIndex+8:]
-		}
-		remainingContent = strings.TrimSpace(re.ReplaceAllString(remainingContent, ""))
-		if remainingContent != "" {
-			tasks = tasks[:0]
-		}
-	}
-
 	if len(tasks) == 0 {
 		return tasks, nil, nil
 	}
