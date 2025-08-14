@@ -214,6 +214,8 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 
 	choice := resp.Choices[0]
 	gen := &Generation{
+		Content:    choice.Message.Content,
+		Role:       choice.Message.Role,
 		StopReason: string(choice.FinishReason),
 		Messages: []openai.ChatCompletionMessage{
 			choice.Message,
@@ -266,7 +268,6 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 	previousContent := ""
 	isReasonningContent := false
 	sb := new(strings.Builder)
-	role := ""
 	noRole := true
 	for {
 		resp, err := stream.Recv()
@@ -291,7 +292,7 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 
 		// 更新生成内容
 		if noRole {
-			role = choice.Delta.Role
+			gen.Role = choice.Delta.Role
 			noRole = false
 		}
 
@@ -344,9 +345,10 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 			gen.Usage.TotalTokens = resp.Usage.TotalTokens
 		}
 	}
+	gen.Content = sb.String()
 	gen.Messages = append(gen.Messages, openai.ChatCompletionMessage{
-		Role:    role,
-		Content: sb.String(),
+		Role:    gen.Role,
+		Content: gen.Content,
 	})
 	return gen, nil
 }
