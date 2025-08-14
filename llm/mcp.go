@@ -734,7 +734,6 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 	}
 
 	finalGen := &Generation{
-		Content:        state.capturedOutput.String(),
 		MCPWorkMode:    state.gen.MCPWorkMode,
 		MCPTaskTag:     state.gen.MCPTaskTag,
 		MCPResultTag:   state.gen.MCPResultTag,
@@ -747,13 +746,6 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, pro
 	c.notifyProcessComplete(ctx, state)
 
 	return finalGen, nil
-}
-
-// isAutoExecuteOption 检查是否是自动执行选项
-func isAutoExecuteOption(opt GenerateOption) bool {
-	testOpt := DefaultGenerateOption()
-	opt(testOpt)
-	return testOpt.MCPAutoExecute
 }
 
 // taskToString 将任务转换为字符串

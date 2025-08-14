@@ -18,15 +18,11 @@ type ExecutionState struct {
 	originalOptions []GenerateOption
 	allTaskResults  []TaskResult
 	executionRound  int
-	capturedOutput  *strings.Builder
 	currentGen      *Generation
 }
 
 // NewExecutionState 创建新的执行状态
 func NewExecutionState(gen *Generation, prompt string, opts *GenerateOptions, originalOptions ...GenerateOption) *ExecutionState {
-	capturedOutput := &strings.Builder{}
-	capturedOutput.WriteString(gen.Content)
-
 	maxRounds := opts.MCPMaxToolExecutionRounds
 	if maxRounds <= 0 {
 		maxRounds = 3
@@ -39,7 +35,6 @@ func NewExecutionState(gen *Generation, prompt string, opts *GenerateOptions, or
 		originalOptions: originalOptions,
 		allTaskResults:  []TaskResult{},
 		executionRound:  0,
-		capturedOutput:  capturedOutput,
 		currentGen:      gen,
 	}
 }
@@ -239,7 +234,6 @@ func (c *MCPClient) streamTextModeResults(ctx context.Context, state *ExecutionS
 		c.notifyToolResult(ctx, state, result)
 	}
 	if len(resultInfos) > 0 {
-		fmt.Fprintf(state.capturedOutput, "<%s>", state.currentGen.MCPResultTag)
 		_ = state.opts.StreamingFunc(ctx, nil, resultInfos)
 	}
 }
@@ -281,7 +275,6 @@ func (c *MCPClient) streamFunctionCallResults(ctx context.Context, state *Execut
 	}
 
 	if len(resultInfos) > 0 {
-		fmt.Fprintf(state.capturedOutput, "<%s>", state.currentGen.MCPResultTag)
 		_ = state.opts.StreamingFunc(ctx, nil, resultInfos)
 	}
 }
@@ -374,9 +367,8 @@ func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState)
 	intermediateMessages := c.buildIntermediateMessages(ctx, state)
 
 	c.notifyIntermediateGeneration(ctx, state, "start")
-	intermediateOpts := c.createIntermediateOptions(state)
 
-	nextGen, err := c.llm.GenerateContent(ctx, intermediateMessages, intermediateOpts...)
+	nextGen, err := c.llm.GenerateContent(ctx, intermediateMessages, state.originalOptions...)
 	if err != nil {
 		c.notifyIntermediateGenerationError(ctx, state, err)
 		return err
@@ -398,9 +390,8 @@ func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) e
 	intermediateMessages := c.buildFinalResultMessages(ctx, state)
 
 	c.notifyIntermediateGeneration(ctx, state, "start")
-	intermediateOpts := c.createIntermediateOptions(state)
 
-	nextGen, err := c.llm.GenerateContent(ctx, intermediateMessages, intermediateOpts...)
+	nextGen, err := c.llm.GenerateContent(ctx, intermediateMessages, state.originalOptions...)
 	if err != nil {
 		c.notifyIntermediateGenerationError(ctx, state, err)
 		return err
@@ -411,6 +402,8 @@ func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) e
 	nextGen.MCPTaskTag = state.gen.MCPTaskTag
 	nextGen.MCPResultTag = state.gen.MCPResultTag
 	nextGen.MCPPrompt = state.gen.MCPPrompt
+	state.gen.Messages = append(state.gen.Messages, nextGen.Messages...)
+	nextGen.Messages = state.gen.Messages
 	state.currentGen = nextGen
 
 	return nil
@@ -605,26 +598,6 @@ func (c *MCPClient) notifyIntermediateGenerationError(ctx context.Context, state
 			Data:  map[string]any{"error": err.Error(), "round": state.executionRound},
 		})
 	}
-}
-
-// createIntermediateOptions 创建中间选项
-func (c *MCPClient) createIntermediateOptions(state *ExecutionState) []GenerateOption {
-	intermediateOpts := make([]GenerateOption, 0)
-	for _, opt := range state.originalOptions {
-		if !isAutoExecuteOption(opt) {
-			intermediateOpts = append(intermediateOpts, opt)
-		}
-	}
-
-	if state.opts.StreamingFunc != nil {
-		intermediateStreamFunc := func(ctx context.Context, chunk []byte, toolResults []MCPToolExecutionResult) error {
-			state.capturedOutput.Write(chunk)
-			return state.opts.StreamingFunc(ctx, chunk, nil)
-		}
-		intermediateOpts = append(intermediateOpts, WithStreamingFunc(intermediateStreamFunc))
-	}
-
-	return intermediateOpts
 }
 
 // mergeGenerationInfo 合并生成信息
