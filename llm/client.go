@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"os"
 	"strings"
@@ -214,9 +213,10 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 
 	choice := resp.Choices[0]
 	gen := &Generation{
-		Content:    choice.Message.Content,
-		Role:       choice.Message.Role,
-		StopReason: string(choice.FinishReason),
+		Role:             choice.Message.Role,
+		Content:          choice.Message.Content,
+		StopReason:       string(choice.FinishReason),
+		ReasoningContent: choice.Message.ReasoningContent,
 		Messages: []openai.ChatCompletionMessage{
 			choice.Message,
 		},
@@ -261,13 +261,7 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 		GenerationInfo: make(map[string]any),
 	}
 
-	repetitionCount, repetitionLimit := 0, opts.RepetitionLimit
-	if repetitionLimit < 1 {
-		repetitionLimit = math.MaxInt
-	}
-	previousContent := ""
-	isReasonningContent := false
-	sb := new(strings.Builder)
+	contentSb, reasoningContentSb := new(strings.Builder), new(strings.Builder)
 	noRole := true
 	for {
 		resp, err := stream.Recv()
@@ -296,31 +290,8 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 			noRole = false
 		}
 
-		currentContent, currentReasoningContent := choice.Delta.Content, choice.Delta.ReasoningContent
-		if currentReasoningContent != "" && !isReasonningContent {
-			isReasonningContent = true
-			currentReasoningContent = fmt.Sprintf("<think>%s", currentReasoningContent)
-		}
-		if currentContent != "" && isReasonningContent {
-			isReasonningContent = false
-			currentReasoningContent = fmt.Sprintf("%s</think>", currentReasoningContent)
-		}
-
-		currentContent = currentReasoningContent + currentContent
-
-		if strings.Contains(currentContent, "MCP_HOST_TASK") {
-			if currentContent != previousContent {
-				repetitionCount = 0
-				previousContent = currentContent
-			} else {
-				repetitionCount++
-			}
-			if repetitionCount >= repetitionLimit {
-				break
-			}
-		}
-
-		sb.WriteString(currentContent)
+		contentSb.WriteString(choice.Delta.Content)
+		reasoningContentSb.WriteString(choice.Delta.ReasoningContent)
 
 		if choice.FinishReason != "" {
 			gen.StopReason = string(choice.FinishReason)
@@ -332,8 +303,8 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 		}
 
 		// 调用流式回调
-		if opts.StreamingFunc != nil && currentContent != "" {
-			if err := opts.StreamingFunc(ctx, []byte(currentContent), nil); err != nil {
+		if opts.StreamingFunc != nil {
+			if err := opts.StreamingFunc(ctx, &choice.Delta, nil); err != nil {
 				return gen, fmt.Errorf("streaming function returned error: %w", err)
 			}
 		}
@@ -345,10 +316,12 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 			gen.Usage.TotalTokens = resp.Usage.TotalTokens
 		}
 	}
-	gen.Content = sb.String()
+	gen.Content = contentSb.String()
+	gen.ReasoningContent = reasoningContentSb.String()
 	gen.Messages = append(gen.Messages, openai.ChatCompletionMessage{
-		Role:    gen.Role,
-		Content: gen.Content,
+		Role:             gen.Role,
+		Content:          gen.Content,
+		ReasoningContent: gen.ReasoningContent,
 	})
 	return gen, nil
 }

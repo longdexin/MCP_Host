@@ -10,6 +10,7 @@ import (
 
 	"github.com/longdexin/MCP_Host"
 	"github.com/longdexin/MCP_Host/llm"
+	"github.com/sashabaranov/go-openai"
 )
 
 // 示例配置，实际不可用
@@ -21,8 +22,9 @@ const (
 )
 
 // 流式输出回调函数
-func streamHandler(ctx context.Context, chunk []byte, toolResults []llm.MCPToolExecutionResult) error {
-	fmt.Print(string(chunk))
+func streamHandler(ctx context.Context, delta *openai.ChatCompletionStreamChoiceDelta, toolResults []llm.MCPToolExecutionResult) error {
+	fmt.Print(delta.ReasoningContent, delta.Content)
+	fmt.Print(delta.Content)
 	return nil
 }
 
