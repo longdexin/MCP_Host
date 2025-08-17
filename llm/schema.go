@@ -8,7 +8,7 @@ import (
 
 type LLM interface {
 	// Generate生成文本回复
-	Generate(ctx context.Context, prompt string, options ...GenerateOption) (*Generation, error)
+	Generate(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error)
 	// GenerateContent使用消息列表生成回复
 	GenerateContent(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error)
 }

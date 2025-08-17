@@ -115,7 +115,7 @@ func (c *MCPClient) SetFunctionCallSystemPrompt(prompt string) {
 }
 
 // Generate 生成回复并处理MCP任务
-func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...GenerateOption) (*Generation, error) {
+func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error) {
 	opts := DefaultGenerateOption()
 	for _, opt := range options {
 		opt(opts)
@@ -134,10 +134,9 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 			systemPrompt += "\n\n" + toolsInfo
 		}
 
-		messages := []Message{
-			*NewSystemMessage("", systemPrompt),
-			*NewUserMessage("", prompt),
-		}
+		allMessages := make([]Message, len(messages)+1)
+		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
+		allMessages = append(allMessages, messages...)
 
 		gen, err := c.llm.GenerateContent(ctx, messages, options...)
 		if err != nil {
@@ -152,7 +151,7 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 
 		// 如果启用了自动执行并存在工具调用，则处理工具调用并生成最终回复
 		if opts.MCPAutoExecute {
-			return c.ExecuteAndFeedback(ctx, gen, prompt, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, options...)
 		}
 
 		return gen, nil
@@ -161,7 +160,7 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
 
 		toolsOption := WithTools(tools)
-		gen, err := c.llm.Generate(ctx, prompt, append(options, toolsOption)...)
+		gen, err := c.llm.Generate(ctx, messages, append(options, toolsOption)...)
 		if err != nil {
 			return nil, err
 		}
@@ -171,7 +170,7 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 		gen.MCPTaskTag = opts.MCPTaskTag
 
 		if opts.MCPAutoExecute && len(gen.ToolCalls) > 0 {
-			return c.ExecuteAndFeedback(ctx, gen, prompt, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, options...)
 		} else if !opts.MCPAutoExecute {
 			c.appendToolCallsToContent(gen, opts.MCPTaskTag)
 		}
@@ -187,14 +186,6 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		opt(opts)
 	}
 
-	var userPrompt string
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == RoleUser {
-			userPrompt = messages[i].Content
-			break
-		}
-	}
-
 	// 在文本模式下添加MCP提示
 	if opts.MCPWorkMode == TextMode {
 		mcpPrompt := opts.MCPPrompt
@@ -207,25 +198,11 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		systemPrompt := strings.Replace(mcpPrompt, "{tool_descs}", toolsInfo, 1)
 
 		// 添加系统提示
-		hasSystemMsg := false
-		var allMessages []Message
+		allMessages := make([]Message, len(messages)+1)
 
-		for _, msg := range messages {
-			if msg.Role == RoleSystem {
-				hasSystemMsg = true
-				newMsg := msg
-				if toolsInfo != "" {
-					newMsg.Content = msg.Content + "\n\n" + toolsInfo
-				}
-				allMessages = append(allMessages, newMsg)
-			} else {
-				allMessages = append(allMessages, msg)
-			}
-		}
+		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
 
-		if !hasSystemMsg && systemPrompt != "" {
-			allMessages = append([]Message{*NewSystemMessage("", systemPrompt)}, allMessages...)
-		}
+		allMessages = append(allMessages, messages...)
 
 		gen, err := c.llm.GenerateContent(ctx, allMessages, options...)
 		if err != nil {
@@ -239,7 +216,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		gen.MCPPrompt = mcpPrompt
 
 		if opts.MCPAutoExecute {
-			return c.ExecuteAndFeedback(ctx, gen, userPrompt, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, options...)
 		}
 
 		return gen, nil
@@ -258,7 +235,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		gen.MCPTaskTag = opts.MCPTaskTag
 
 		if opts.MCPAutoExecute && len(gen.ToolCalls) > 0 {
-			return c.ExecuteAndFeedback(ctx, gen, userPrompt, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, options...)
 		} else if !opts.MCPAutoExecute {
 			c.appendToolCallsToContent(gen, opts.MCPTaskTag)
 		}
@@ -806,13 +783,13 @@ type MCPToolExecutionResult struct {
 }
 
 // ExecuteAndFeedback 执行工具调用并将结果反馈给LLM生成最终回复
-func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, prompt string, options ...GenerateOption) (*Generation, error) {
+func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, messages []Message, options ...GenerateOption) (*Generation, error) {
 	if !c.hasToolCalls(gen) {
 		return gen, nil
 	}
 
 	opts, originalOptions := c.prepareOptions(options)
-	state := NewExecutionState(gen, prompt, opts, originalOptions...)
+	state := NewExecutionState(gen, messages, opts, originalOptions...)
 	c.notifyExecutionStart(ctx, state)
 
 	// 执行工具调用循环

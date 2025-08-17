@@ -93,9 +93,8 @@ func NewOpenAIClient(opts ...OpenAIOption) (*OpenAIClient, error) {
 }
 
 // Generate 生成文本回复
-func (c *OpenAIClient) Generate(ctx context.Context, prompt string, options ...GenerateOption) (*Generation, error) {
-	message := NewUserMessage("", prompt)
-	return c.GenerateContent(ctx, []Message{*message}, options...)
+func (c *OpenAIClient) Generate(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error) {
+	return c.GenerateContent(ctx, messages, options...)
 }
 
 // GenerateContent 使用消息列表生成回复

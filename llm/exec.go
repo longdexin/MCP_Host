@@ -13,7 +13,7 @@ import (
 // ExecutionState 存储执行状态
 type ExecutionState struct {
 	gen             *Generation
-	prompt          string
+	messages        []Message
 	opts            *GenerateOptions
 	originalOptions []GenerateOption
 	allTaskResults  []TaskResult
@@ -22,7 +22,7 @@ type ExecutionState struct {
 }
 
 // NewExecutionState 创建新的执行状态
-func NewExecutionState(gen *Generation, prompt string, opts *GenerateOptions, originalOptions ...GenerateOption) *ExecutionState {
+func NewExecutionState(gen *Generation, messages []Message, opts *GenerateOptions, originalOptions ...GenerateOption) *ExecutionState {
 	maxRounds := opts.MCPMaxToolExecutionRounds
 	if maxRounds <= 0 {
 		maxRounds = 3
@@ -30,7 +30,7 @@ func NewExecutionState(gen *Generation, prompt string, opts *GenerateOptions, or
 
 	return &ExecutionState{
 		gen:             gen,
-		prompt:          prompt,
+		messages:        messages,
 		opts:            opts,
 		originalOptions: originalOptions,
 		allTaskResults:  []TaskResult{},
@@ -429,77 +429,46 @@ func (c *MCPClient) buildFinalResultMessages(ctx context.Context, state *Executi
 
 // buildTextModeIntermediateMessages 构建文本模式中间消息
 func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state *ExecutionState) []Message {
-	var messages []Message
+	allMessages := make([]Message, 0, 1+len(state.messages)+len(state.currentGen.Messages))
 
 	toolsInfo := c.formatMCPToolsAsJSON(ctx, state.opts.MCPDisabledTools...)
 	systemMsg := NewSystemMessage("", strings.Replace(state.currentGen.MCPPrompt, "{tool_descs}", toolsInfo, 1))
 
-	messages = append(messages, *systemMsg)
-	messages = append(messages, *NewUserMessage("", state.prompt))
+	allMessages = append(allMessages, *systemMsg)
+	allMessages = append(allMessages, state.messages...)
 
-	// 添加工具结果
-	for _, result := range state.allTaskResults {
-		var toolMsg string
-		if result.Error != "" {
-			toolMsg = fmt.Sprintf(c.toolErrorMsgTemplate, result.Task.Server, result.Task.Tool, result.Error)
-		} else {
-			contents, ok := result.Result.([]mcp.Content)
-			if ok {
-				texts := make([]string, 0, len(contents))
-				for _, content := range contents {
-					switch content := content.(type) {
-					case mcp.TextContent:
-						texts = append(texts, content.Text)
-					default:
-					}
-				}
-				toolMsg = fmt.Sprintf("<%s>%s</%s>", state.opts.MCPResultTag, strings.Join(texts, "\n\n"), state.opts.MCPResultTag)
-			}
-		}
-		messages = append(messages, *NewUserMessage("", toolMsg))
+	for _, message := range state.gen.Messages {
+		allMessages = append(allMessages, Message{
+			Role:    MessageRole(message.Role),
+			Content: message.Content,
+		})
 	}
 
-	return messages
+	return allMessages
 }
 
 // buildTextModeIntermediateMessages 构建文本模式中间消息
 func (c *MCPClient) buildTextModeFinalResultMessages(ctx context.Context, state *ExecutionState) []Message {
-	var messages []Message
+	allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
 
 	toolsInfo := c.formatMCPToolsAsJSON(ctx, state.opts.MCPDisabledTools...)
 	systemMsg := NewSystemMessage("", strings.Replace(state.currentGen.MCPPrompt, "{tool_descs}", toolsInfo, 1))
 
-	messages = append(messages, *systemMsg)
-	messages = append(messages, *NewUserMessage("", state.prompt))
+	allMessages = append(allMessages, *systemMsg)
+	allMessages = append(allMessages, state.messages...)
 
-	// 添加工具结果
-	for _, result := range state.allTaskResults {
-		var toolMsg string
-		if result.Error != "" {
-			toolMsg = fmt.Sprintf(c.toolErrorMsgTemplate, result.Task.Server, result.Task.Tool, result.Error)
-		} else {
-			contents, ok := result.Result.([]mcp.Content)
-			if ok {
-				texts := make([]string, 0, len(contents))
-				for _, content := range contents {
-					switch content := content.(type) {
-					case mcp.TextContent:
-						texts = append(texts, content.Text)
-					default:
-					}
-				}
-				toolMsg = fmt.Sprintf("<%s>%s</%s>", state.opts.MCPResultTag, strings.Join(texts, "\n\n"), state.opts.MCPResultTag)
-			}
-		}
-
-		messages = append(messages, *NewUserMessage("", toolMsg))
+	for _, message := range state.gen.Messages {
+		allMessages = append(allMessages, Message{
+			Role:    MessageRole(message.Role),
+			Content: message.Content,
+		})
 	}
 
 	// 添加额外指导
 	guidanceMsg := c.finalResultMsgTemplate
-	messages = append(messages, *NewUserMessage("", guidanceMsg))
+	allMessages = append(allMessages, *NewUserMessage("", guidanceMsg))
 
-	return messages
+	return allMessages
 }
 
 // buildFunctionCallIntermediateMessages 构建函数调用模式中间消息
@@ -507,7 +476,7 @@ func (c *MCPClient) buildFunctionCallIntermediateMessages(state *ExecutionState)
 	var messages []Message
 	systemMsg := NewSystemMessage("", c.functionCallSystemPrompt)
 	messages = append(messages, *systemMsg)
-	messages = append(messages, *NewUserMessage("", c.userQuestionTemplate+state.prompt))
+	messages = append(messages, state.messages...)
 	assistantMsg := NewAssistantMessage("", "", state.currentGen.ToolCalls)
 	messages = append(messages, *assistantMsg)
 
@@ -541,7 +510,7 @@ func (c *MCPClient) buildFunctionCallFinalResultMessages(state *ExecutionState) 
 	var messages []Message
 	systemMsg := NewSystemMessage("", c.functionCallSystemPrompt)
 	messages = append(messages, *systemMsg)
-	messages = append(messages, *NewUserMessage("", c.userQuestionTemplate+state.prompt))
+	messages = append(messages, state.messages...)
 	assistantMsg := NewAssistantMessage("", "", state.currentGen.ToolCalls)
 	messages = append(messages, *assistantMsg)
 

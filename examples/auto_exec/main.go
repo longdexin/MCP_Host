@@ -91,7 +91,7 @@ func main() {
 		"server1.get_random_inspiration",
 	}
 
-	_, err = mcpClient.Generate(ctx, "从苏州站到上海虹桥站的最佳出行方案是什么？",
+	_, err = mcpClient.Generate(ctx, []llm.Message{{Role: llm.RoleUser, Content: "从苏州站到上海虹桥站的最佳出行方案是什么？"}},
 		llm.WithMCPWorkMode(llm.TextMode),
 		llm.WithStreamingFunc(streamHandler),
 		llm.WithMCPAutoExecute(true),

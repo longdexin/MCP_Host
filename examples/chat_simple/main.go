@@ -61,7 +61,7 @@ func main() {
 
 	fmt.Println("\n--- 文本模式流式示例（不自动执行工具） ---")
 	fmt.Print("LLM响应: ")
-	textResult, err := mcpClient.Generate(ctx, "现在是几点",
+	textResult, err := mcpClient.Generate(ctx, []llm.Message{{Role: llm.RoleUser, Content: "现在是几点"}},
 		llm.WithMCPWorkMode(llm.TextMode),
 		llm.WithStreamingFunc(streamHandler),
 		llm.WithMCPAutoExecute(false),
@@ -101,7 +101,7 @@ func main() {
 
 	fmt.Println("\n--- 文本模式流式示例（自动执行工具） ---")
 	fmt.Print("LLM响应: ")
-	autoResult, err := mcpClient.Generate(ctx, "现在是几点",
+	autoResult, err := mcpClient.Generate(ctx, []llm.Message{{Role: llm.RoleUser, Content: "现在是几点"}},
 		llm.WithMCPWorkMode(llm.TextMode),
 		llm.WithStreamingFunc(streamHandler),
 		llm.WithMCPAutoExecute(true),
@@ -127,7 +127,7 @@ func main() {
 
 	fmt.Println("\n--- 函数调用模式流式示例（不自动执行工具） ---")
 	fmt.Print("LLM响应: ")
-	funcResult, err := mcpClient.Generate(ctx, "现在是几点",
+	funcResult, err := mcpClient.Generate(ctx, []llm.Message{{Role: llm.RoleUser, Content: "现在是几点"}},
 		llm.WithMCPWorkMode(llm.FunctionCallMode),
 		llm.WithStreamingFunc(streamHandler),
 		llm.WithMCPAutoExecute(false),
