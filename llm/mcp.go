@@ -127,7 +127,7 @@ func (c *MCPClient) Generate(ctx context.Context, prompt string, options ...Gene
 		if mcpPrompt == "" {
 			mcpPrompt = c.prompt
 		}
-		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPTaskTag, opts.MCPDisabledTools...)
+		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPDisabledTools...)
 
 		systemPrompt := mcpPrompt
 		if toolsInfo != "" {
@@ -202,12 +202,9 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 			mcpPrompt = c.prompt
 		}
 
-		toolsInfo := c.formatMCPToolsAsJSON(ctx, opts.MCPTaskTag, opts.MCPDisabledTools...)
+		toolsInfo := c.formatMCPToolsAsJSON(ctx, opts.MCPDisabledTools...)
 
-		systemPrompt := mcpPrompt
-		if toolsInfo != "" {
-			systemPrompt = strings.Replace(systemPrompt, "{tool_descs}", toolsInfo, 1)
-		}
+		systemPrompt := strings.Replace(mcpPrompt, "{tool_descs}", toolsInfo, 1)
 
 		// 添加系统提示
 		hasSystemMsg := false
@@ -479,7 +476,7 @@ func (c *MCPClient) ExecuteToolCalls(ctx context.Context, gen *Generation) error
 }
 
 // formatMCPToolsAsText 将MCP工具信息格式化为文本形式
-func (c *MCPClient) formatMCPToolsAsJSON(ctx context.Context, taskTag string, disabledTools ...string) string {
+func (c *MCPClient) formatMCPToolsAsJSON(ctx context.Context, disabledTools ...string) string {
 	connections := c.host.GetAllConnections()
 
 	hasTools := false
@@ -524,10 +521,14 @@ func (c *MCPClient) formatMCPToolsAsJSON(ctx context.Context, taskTag string, di
 		if len(toolsResult.Tools) > 0 {
 			hasTools = true
 			for _, tool := range toolsResult.Tools {
+				toolFullName := fmt.Sprintf("%s.%s", serverID, tool.Name)
+				if disabledToolsMap[toolFullName] {
+					continue
+				}
 				qwenTool := QwenTool{
 					Type: "function",
 					Function: QwenFunction{
-						Name:        fmt.Sprintf("%s.%s", serverID, tool.Name),
+						Name:        toolFullName,
 						Description: tool.Description,
 						Parameters:  tool.InputSchema,
 					},
@@ -549,7 +550,7 @@ func (c *MCPClient) formatMCPToolsAsJSON(ctx context.Context, taskTag string, di
 }
 
 // formatMCPToolsAsText 将MCP工具信息格式化为文本形式
-func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, disabledTools ...string) string {
+func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, disabledTools ...string) string {
 	var builder strings.Builder
 	builder.WriteString("Available tools:\n\n")
 

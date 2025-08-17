@@ -431,11 +431,9 @@ func (c *MCPClient) buildFinalResultMessages(ctx context.Context, state *Executi
 func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state *ExecutionState) []Message {
 	var messages []Message
 
-	systemMsg := NewSystemMessage("", state.currentGen.MCPPrompt)
-	toolsInfo := c.formatMCPToolsAsText(ctx, state.currentGen.MCPTaskTag, state.opts.MCPDisabledTools...)
-	if toolsInfo != "" {
-		systemMsg.Content += "\n\n" + toolsInfo
-	}
+	toolsInfo := c.formatMCPToolsAsJSON(ctx, state.opts.MCPDisabledTools...)
+	systemMsg := NewSystemMessage("", strings.Replace(state.currentGen.MCPPrompt, "{tool_descs}", toolsInfo, 1))
+
 	messages = append(messages, *systemMsg)
 	messages = append(messages, *NewUserMessage("", state.prompt))
 
@@ -455,7 +453,7 @@ func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state
 					default:
 					}
 				}
-				toolMsg = fmt.Sprintf(c.toolResultMsgTemplate, result.Task.Server, result.Task.Tool, strings.Join(texts, "\n\n"))
+				toolMsg = fmt.Sprintf("<%s>%s</%s>", state.opts.MCPResultTag, strings.Join(texts, "\n\n"), state.opts.MCPResultTag)
 			}
 		}
 		messages = append(messages, *NewUserMessage("", toolMsg))
@@ -468,11 +466,9 @@ func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state
 func (c *MCPClient) buildTextModeFinalResultMessages(ctx context.Context, state *ExecutionState) []Message {
 	var messages []Message
 
-	systemMsg := NewSystemMessage("", state.currentGen.MCPPrompt)
-	toolsInfo := c.formatMCPToolsAsText(ctx, state.currentGen.MCPTaskTag, state.opts.MCPDisabledTools...)
-	if toolsInfo != "" {
-		systemMsg.Content += "\n\n" + toolsInfo
-	}
+	toolsInfo := c.formatMCPToolsAsJSON(ctx, state.opts.MCPDisabledTools...)
+	systemMsg := NewSystemMessage("", strings.Replace(state.currentGen.MCPPrompt, "{tool_descs}", toolsInfo, 1))
+
 	messages = append(messages, *systemMsg)
 	messages = append(messages, *NewUserMessage("", state.prompt))
 
@@ -492,7 +488,7 @@ func (c *MCPClient) buildTextModeFinalResultMessages(ctx context.Context, state 
 					default:
 					}
 				}
-				toolMsg = fmt.Sprintf(c.toolResultMsgTemplate, result.Task.Server, result.Task.Tool, strings.Join(texts, "\n\n"))
+				toolMsg = fmt.Sprintf("<%s>%s</%s>", state.opts.MCPResultTag, strings.Join(texts, "\n\n"), state.opts.MCPResultTag)
 			}
 		}
 
