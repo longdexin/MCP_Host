@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -17,6 +18,11 @@ type MCPTask struct {
 	Tool   string         `json:"tool"`          // 工具名称
 	Args   map[string]any `json:"args"`          // 参数
 	Text   string         `json:"text,optional"` // 原始任务字符串
+}
+
+type QwenToolCall struct {
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
 }
 
 // TaskResult 任务执行的结果
@@ -184,11 +190,11 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 			mcpPrompt = c.prompt
 		}
 
-		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPTaskTag, opts.MCPDisabledTools...)
+		toolsInfo := c.formatMCPToolsAsJSON(ctx, opts.MCPTaskTag, opts.MCPDisabledTools...)
 
 		systemPrompt := mcpPrompt
 		if toolsInfo != "" {
-			systemPrompt += "\n\n" + toolsInfo
+			systemPrompt = strings.Replace(systemPrompt, "{tool_descs}", toolsInfo, 1)
 		}
 
 		// 添加系统提示
@@ -414,12 +420,12 @@ func (c *MCPClient) appendToolCallsToContent(gen *Generation, taskTag string) {
 }
 
 // ExtractMCPTasks 从文本中提取MCP任务
-func (c *MCPClient) ExtractMCPTasks(content string, taskTag ...string) ([]MCPTask, error) {
-	tag := MCP_DEFAULT_TASK_TAG
-	if len(taskTag) > 0 && taskTag[0] != "" {
-		tag = taskTag[0]
+func (c *MCPClient) ExtractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
+	taskTag = strings.TrimSpace(taskTag)
+	if taskTag == "" {
+		return nil, errors.New("blank taskTag")
 	}
-	return extractMCPTasks(content, tag)
+	return extractMCPTasks(content, taskTag)
 }
 
 // ExecuteToolCalls 执行工具调用并返回更新后的生成结果
@@ -458,6 +464,68 @@ func (c *MCPClient) ExecuteToolCalls(ctx context.Context, gen *Generation) error
 	}
 
 	return nil
+}
+
+// formatMCPToolsAsText 将MCP工具信息格式化为文本形式
+func (c *MCPClient) formatMCPToolsAsJSON(ctx context.Context, taskTag string, disabledTools ...string) string {
+	connections := c.host.GetAllConnections()
+
+	hasTools := false
+
+	// 创建禁用工具的快速查找表
+	disabledToolsMap := make(map[string]bool)
+	for _, dt := range disabledTools {
+		disabledToolsMap[dt] = true
+	}
+	tools := make([]string, 0, 100)
+	for serverID := range connections {
+		toolsResult, err := c.host.ListTools(ctx, serverID)
+		if err != nil {
+			toolsResult, err = c.host.ListTools(ctx, serverID)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		}
+
+		if len(toolsResult.Tools) < 1 {
+			toolsResult, err = c.host.ListTools(ctx, serverID)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+		}
+
+		serverHasTools := false
+		for _, tool := range toolsResult.Tools {
+			toolFullName := fmt.Sprintf("%s.%s", serverID, tool.Name)
+			if !disabledToolsMap[toolFullName] {
+				serverHasTools = true
+				break
+			}
+		}
+
+		if !serverHasTools {
+			continue
+		}
+
+		if len(toolsResult.Tools) > 0 {
+			hasTools = true
+			for _, tool := range toolsResult.Tools {
+				bs, err := json.Marshal(tool)
+				if err != nil {
+					continue
+				}
+				tools = append(tools, string(bs))
+			}
+		}
+	}
+
+	if !hasTools {
+		return ""
+	}
+
+	return strings.Join(tools, "\n")
 }
 
 // formatMCPToolsAsText 将MCP工具信息格式化为文本形式
@@ -569,15 +637,6 @@ func (c *MCPClient) formatMCPToolsAsText(ctx context.Context, taskTag string, di
 		return ""
 	}
 
-	// builder.WriteString("Please follow the format below to call the tool:\n")
-	// builder.WriteString(fmt.Sprintf("<%s>\n", taskTag))
-	// builder.WriteString("{\n")
-	// builder.WriteString("  \"server\": \"Server ID\",\n")
-	// builder.WriteString("  \"tool\": \"Tool Name\",\n")
-	// builder.WriteString("  \"args\": {\"arg1\": \"value1\"}\n")
-	// builder.WriteString("}\n")
-	// builder.WriteString(fmt.Sprintf("</%s>\n", taskTag))
-
 	return builder.String()
 }
 
@@ -684,22 +743,29 @@ func extractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
 			continue
 		}
 
-		taskJSON := match[1]
+		toolCallJSON := match[1]
 
-		taskJSON = strings.TrimSpace(taskJSON)
+		toolCallJSON = strings.TrimSpace(toolCallJSON)
 
 		// 解析JSON
-		var task MCPTask
-		if err := json.Unmarshal([]byte(taskJSON), &task); err != nil {
+		var toolCall QwenToolCall
+		if err := json.Unmarshal([]byte(toolCallJSON), &toolCall); err != nil {
 			continue
 		}
-
+		names := strings.Split(toolCall.Name, ".")
+		if len(names) != 2 {
+			continue
+		}
+		task := MCPTask{
+			Server: names[0],
+			Tool:   names[1],
+			Args:   toolCall.Arguments,
+			Text:   toolCallJSON,
+		}
 		// 验证任务
 		if task.Server == "" || task.Tool == "" {
 			continue
 		}
-
-		task.Text = taskJSON
 
 		tasks = append(tasks, task)
 	}

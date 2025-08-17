@@ -144,7 +144,7 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 	RESULT_LOOP:
 		for i := range roundTaskResults {
 			if roundTaskResults[i].Error != "" {
-				content := fmt.Sprintf("<MCP_HOST_RESULT>%s.%s error: %s</MCP_HOST_RESULT>", roundTaskResults[i].Task.Server, roundTaskResults[i].Task.Tool, roundTaskResults[i].Error)
+				content := fmt.Sprintf("<%s>%s.%s error: %s</%s>", state.opts.MCPResultTag, roundTaskResults[i].Task.Server, roundTaskResults[i].Task.Tool, roundTaskResults[i].Error, state.opts.MCPResultTag)
 				state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: content})
 				continue RESULT_LOOP
 			}
@@ -157,7 +157,7 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 					default:
 					}
 				}
-				content := fmt.Sprintf("<MCP_HOST_RESULT>%s</MCP_HOST_RESULT>", strings.Join(texts, "\n\n"))
+				content := fmt.Sprintf("<%s>%s</%s>", state.opts.MCPResultTag, strings.Join(texts, "\n\n"), state.opts.MCPResultTag)
 				state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: content})
 			}
 		}
@@ -459,13 +459,6 @@ func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state
 			}
 		}
 		messages = append(messages, *NewUserMessage("", toolMsg))
-	}
-
-	// 添加额外指导
-	remainingRounds := state.opts.MCPMaxToolExecutionRounds - state.executionRound
-	if remainingRounds > 0 {
-		guidanceMsg := fmt.Sprintf(c.nextRoundMsgTemplate, remainingRounds)
-		messages = append(messages, *NewUserMessage("", guidanceMsg))
 	}
 
 	return messages

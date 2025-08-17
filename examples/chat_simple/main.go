@@ -71,7 +71,7 @@ func main() {
 	}
 
 	fmt.Println("\n--- 手动执行工具调用 ---")
-	tasks, err := mcpClient.ExtractMCPTasks(textResult.Content)
+	tasks, err := mcpClient.ExtractMCPTasks(textResult.Content, "MCP_HOST_TASK")
 	if err != nil {
 		log.Printf("提取任务失败: %v", err)
 	} else if len(tasks) > 0 {
