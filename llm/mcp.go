@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/longdexin/MCP_Host"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // MCPTask MCP任务
@@ -23,6 +24,17 @@ type MCPTask struct {
 type QwenToolCall struct {
 	Name      string         `json:"name"`
 	Arguments map[string]any `json:"arguments"`
+}
+
+type QwenFunction struct {
+	Name        string              `json:"name"`
+	Description string              `json:"description"`
+	Parameters  mcp.ToolInputSchema `json:"parameters"`
+}
+
+type QwenTool struct {
+	Type     string       `json:"type"`
+	Function QwenFunction `json:"function"`
 }
 
 // TaskResult 任务执行的结果
@@ -512,7 +524,15 @@ func (c *MCPClient) formatMCPToolsAsJSON(ctx context.Context, taskTag string, di
 		if len(toolsResult.Tools) > 0 {
 			hasTools = true
 			for _, tool := range toolsResult.Tools {
-				bs, err := json.Marshal(tool)
+				qwenTool := QwenTool{
+					Type: "function",
+					Function: QwenFunction{
+						Name:        fmt.Sprintf("%s.%s", serverID, tool.Name),
+						Description: tool.Description,
+						Parameters:  tool.InputSchema,
+					},
+				}
+				bs, err := json.Marshal(qwenTool)
 				if err != nil {
 					continue
 				}
