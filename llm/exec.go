@@ -429,7 +429,7 @@ func (c *MCPClient) buildFinalResultMessages(ctx context.Context, state *Executi
 
 // buildTextModeIntermediateMessages 构建文本模式中间消息
 func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state *ExecutionState) []Message {
-	allMessages := make([]Message, 0, 1+len(state.messages)+len(state.currentGen.Messages))
+	allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
 
 	toolsInfo := c.formatMCPToolsAsJSON(ctx, state.opts.MCPDisabledTools...)
 	systemMsg := NewSystemMessage("", strings.Replace(state.currentGen.MCPPrompt, "{tool_descs}", toolsInfo, 1))
@@ -443,7 +443,7 @@ func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state
 			Content: message.Content,
 		})
 	}
-
+	allMessages = append(allMessages, *NewUserMessage("", c.nextRoundMsgTemplate))
 	return allMessages
 }
 
