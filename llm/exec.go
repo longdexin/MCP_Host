@@ -144,7 +144,7 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 	RESULT_LOOP:
 		for i := range roundTaskResults {
 			if roundTaskResults[i].Error != "" {
-				content := fmt.Sprintf("<%s>%s.%s error: %s</%s>", state.opts.MCPResultTag, roundTaskResults[i].Task.Server, roundTaskResults[i].Task.Tool, roundTaskResults[i].Error, state.opts.MCPResultTag)
+				content := fmt.Sprintf(state.opts.ToolErrorMsgTemplate, state.opts.MCPResultTag, roundTaskResults[i].Task.Server, roundTaskResults[i].Task.Tool, roundTaskResults[i].Error, state.opts.MCPResultTag)
 				state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: content})
 				continue RESULT_LOOP
 			}
@@ -157,7 +157,7 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 					default:
 					}
 				}
-				content := fmt.Sprintf("<%s>%s</%s>", state.opts.MCPResultTag, strings.Join(texts, "\n\n"), state.opts.MCPResultTag)
+				content := fmt.Sprintf(state.opts.ToolResultMsgTemplate, state.opts.MCPResultTag, strings.Join(texts, "\n\n"), state.opts.MCPResultTag)
 				state.gen.Messages = append(state.gen.Messages, openai.ChatCompletionMessage{Role: openai.ChatMessageRoleUser, Content: content})
 			}
 		}
@@ -364,7 +364,7 @@ func (c *MCPClient) notifyFunctionCallResult(ctx context.Context, state *Executi
 
 // prepareNextRound 准备下一轮执行
 func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState) error {
-	intermediateMessages := c.buildIntermediateMessages(ctx, state)
+	intermediateMessages := c.buildIntermediateMessages(state)
 
 	c.notifyIntermediateGeneration(ctx, state, "start")
 
@@ -387,7 +387,7 @@ func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState)
 }
 
 func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) error {
-	intermediateMessages := c.buildFinalResultMessages(ctx, state)
+	intermediateMessages := c.buildFinalResultMessages(state)
 
 	c.notifyIntermediateGeneration(ctx, state, "start")
 
@@ -410,25 +410,25 @@ func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) e
 }
 
 // buildIntermediateMessages 构建中间消息
-func (c *MCPClient) buildIntermediateMessages(ctx context.Context, state *ExecutionState) []Message {
+func (c *MCPClient) buildIntermediateMessages(state *ExecutionState) []Message {
 	if state.currentGen.MCPWorkMode == TextMode {
-		return c.buildTextModeIntermediateMessages(ctx, state)
+		return c.buildTextModeIntermediateMessages(state)
 	} else {
 		return c.buildFunctionCallIntermediateMessages(state)
 	}
 }
 
 // buildIntermediateMessages 构建中间消息
-func (c *MCPClient) buildFinalResultMessages(ctx context.Context, state *ExecutionState) []Message {
+func (c *MCPClient) buildFinalResultMessages(state *ExecutionState) []Message {
 	if state.currentGen.MCPWorkMode == TextMode {
-		return c.buildTextModeFinalResultMessages(ctx, state)
+		return c.buildTextModeFinalResultMessages(state)
 	} else {
 		return c.buildFunctionCallFinalResultMessages(state)
 	}
 }
 
 // buildTextModeIntermediateMessages 构建文本模式中间消息
-func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state *ExecutionState) []Message {
+func (c *MCPClient) buildTextModeIntermediateMessages(state *ExecutionState) []Message {
 	allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
 	systemMsg := NewSystemMessage("", state.currentGen.MCPSystemPrompt)
 	allMessages = append(allMessages, *systemMsg)
@@ -445,7 +445,7 @@ func (c *MCPClient) buildTextModeIntermediateMessages(ctx context.Context, state
 }
 
 // buildTextModeIntermediateMessages 构建文本模式中间消息
-func (c *MCPClient) buildTextModeFinalResultMessages(ctx context.Context, state *ExecutionState) []Message {
+func (c *MCPClient) buildTextModeFinalResultMessages(state *ExecutionState) []Message {
 	allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
 	systemMsg := NewSystemMessage("", state.currentGen.MCPSystemPrompt)
 
