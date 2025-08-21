@@ -38,7 +38,6 @@ type GenerateOptions struct {
 
 	// MCP相关选项
 	MCPWorkMode               LLMWorkMode `json:"-"` // LLM工作模式
-	MCPPrompt                 string      `json:"-"` // 在文本模式下使用的提示
 	MCPAutoExecute            bool        `json:"-"` // 是否自动执行MCP工具调用
 	MCPTaskTag                string      `json:"-"` // MCP任务标签，默认为 MCP_HOST_TASK
 	MCPResultTag              string      `json:"-"` // MCP结果标签，默认为 MCP_HOST_RESULT
@@ -47,7 +46,11 @@ type GenerateOptions struct {
 
 	StateNotifyFunc StateNotifyFunc `json:"-"` // 状态通知回调
 
-	RepetitionLimit int `json:"-"` // 流式生成时，内容重复次数限制，若超出次数，则从循环break
+	SystemPromptTemplate   string // 默认提示
+	ToolErrorMsgTemplate   string // 工具错误消息模板
+	ToolResultMsgTemplate  string // 工具结果消息模板
+	NextRoundMsgTemplate   string // 下一轮分析消息模板
+	FinalResultMsgTemplate string // 最终答案消息模板
 }
 
 // Tool 模型可以使用的工具
@@ -146,13 +149,6 @@ func WithMCPWorkMode(mode LLMWorkMode) GenerateOption {
 	}
 }
 
-// WithMCPPrompt 指定MCP在文本模式下使用的提示
-func WithMCPPrompt(prompt string) GenerateOption {
-	return func(o *GenerateOptions) {
-		o.MCPPrompt = prompt
-	}
-}
-
 // WithTools 指定要使用的工具
 func WithTools(tools []Tool) GenerateOption {
 	return func(o *GenerateOptions) {
@@ -209,11 +205,15 @@ func DefaultGenerateOption() *GenerateOptions {
 	return &GenerateOptions{
 		ParallelToolCalls:         nil,
 		MCPWorkMode:               TextMode,
-		MCPPrompt:                 defaultMCPPrompt,
 		MCPAutoExecute:            false, // 默认不自动执行
 		MCPTaskTag:                MCP_DEFAULT_TASK_TAG,
 		MCPResultTag:              MCP_DEFAULT_RESULT_TAG,
-		MCPMaxToolExecutionRounds: 0,
+		MCPMaxToolExecutionRounds: 5,
+		SystemPromptTemplate:      defaultSystemPromptTemplate,
+		ToolErrorMsgTemplate:      defaultToolErrorMessageTemplate,
+		ToolResultMsgTemplate:     defaultToolResultMessageTemplate,
+		NextRoundMsgTemplate:      defaultNextRoundMsgTemplate,
+		FinalResultMsgTemplate:    defaultFinalResultMsgTemplate,
 	}
 }
 

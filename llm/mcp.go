@@ -46,92 +46,37 @@ type TaskResult struct {
 
 // MCPClient MCP的LLM客户端包装
 type MCPClient struct {
-	llm                      LLM               // 底层LLM客户端
-	host                     *MCP_Host.MCPHost // MCP主机
-	prompt                   string            // 默认提示
-	toolErrorMsgTemplate     string            // 工具错误消息模板
-	toolResultMsgTemplate    string            // 工具结果消息模板
-	nextRoundFlagTemplate    string            // 下一轮分析标识模板
-	nextRoundMsgTemplate     string            // 下一轮分析消息模板
-	finalResultMsgTemplate   string            // 最终答案消息模板
-	userQuestionTemplate     string            // 用户问题模板
-	functionCallSystemPrompt string            // 函数调用模式的系统提示
+	llm  LLM               // 底层LLM客户端
+	host *MCP_Host.MCPHost // MCP主机
 }
 
 // NewMCPClient 创建一个新的MCPClient
 func NewMCPClient(llm LLM, host *MCP_Host.MCPHost) *MCPClient {
 	return &MCPClient{
-		llm:                      llm,
-		host:                     host,
-		prompt:                   defaultMCPPrompt,
-		toolErrorMsgTemplate:     defaultToolErrorMessageTemplate,
-		toolResultMsgTemplate:    defaultToolResultMessageTemplate,
-		nextRoundFlagTemplate:    defaultNextRoundFlagTemplate,
-		nextRoundMsgTemplate:     defaultNextRoundMsgTemplate,
-		finalResultMsgTemplate:   defaultFinalResultMsgTemplate,
-		userQuestionTemplate:     defaultUserQuestionTemplate,
-		functionCallSystemPrompt: defaultFunctionCallSystemPrompt,
+		llm:  llm,
+		host: host,
 	}
-}
-
-// SetPrompt 设置默认提示
-func (c *MCPClient) SetPrompt(prompt string) {
-	c.prompt = prompt
-}
-
-// SetToolErrorMessageTemplate 设置工具错误消息模板
-func (c *MCPClient) SetToolErrorMessageTemplate(template string) {
-	c.toolErrorMsgTemplate = template
-}
-
-// SetToolResultMessageTemplate 设置工具结果消息模板
-func (c *MCPClient) SetToolResultMessageTemplate(template string) {
-	c.toolResultMsgTemplate = template
-}
-
-// SetNextRoundFlagTemplate 设置下一轮标识模板
-func (c *MCPClient) SetNextRoundFlagTemplate(template string) {
-	c.nextRoundFlagTemplate = template
-}
-
-// SetNextRoundMsgTemplate 设置下一轮消息模板
-func (c *MCPClient) SetNextRoundMsgTemplate(template string) {
-	c.nextRoundMsgTemplate = template
-}
-
-// SetFinalResultMsgTemplate 设置最终结果消息模板
-func (c *MCPClient) SetFinalResultMsgTemplate(template string) {
-	c.finalResultMsgTemplate = template
-}
-
-// SetUserQuestionTemplate 设置用户问题模板
-func (c *MCPClient) SetUserQuestionTemplate(template string) {
-	c.userQuestionTemplate = template
-}
-
-// SetFunctionCallSystemPrompt 设置函数调用模式的系统提示
-func (c *MCPClient) SetFunctionCallSystemPrompt(prompt string) {
-	c.functionCallSystemPrompt = prompt
 }
 
 // Generate 生成回复并处理MCP任务
 func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error) {
-	opts := DefaultGenerateOption()
-	for _, opt := range options {
-		opt(opts)
-	}
+	opts := c.prepareOptions(options)
 
 	// 在文本模式下添加MCP提示
 	if opts.MCPWorkMode == TextMode {
-		mcpPrompt := opts.MCPPrompt
+		mcpPrompt := strings.TrimSpace(opts.SystemPromptTemplate)
 		if mcpPrompt == "" {
-			mcpPrompt = c.prompt
+			return nil, errors.New("system prompt template is blank")
 		}
 		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPDisabledTools...)
 
 		systemPrompt := mcpPrompt
 		if toolsInfo != "" {
-			systemPrompt += "\n\n" + toolsInfo
+			if strings.Contains(systemPrompt, "{tool_descs}") {
+				systemPrompt = strings.Replace(systemPrompt, "{tool_descs}", toolsInfo, 1)
+			} else {
+				systemPrompt += "\n\n" + toolsInfo
+			}
 		}
 
 		allMessages := make([]Message, len(messages)+1)
@@ -147,11 +92,11 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 		gen.MCPWorkMode = opts.MCPWorkMode
 		gen.MCPTaskTag = opts.MCPTaskTag
 		gen.MCPResultTag = opts.MCPResultTag
-		gen.MCPPrompt = mcpPrompt
+		gen.MCPSystemPrompt = systemPrompt
 
 		// 如果启用了自动执行并存在工具调用，则处理工具调用并生成最终回复
 		if opts.MCPAutoExecute {
-			return c.ExecuteAndFeedback(ctx, gen, messages, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, opts, options...)
 		}
 
 		return gen, nil
@@ -170,7 +115,7 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 		gen.MCPTaskTag = opts.MCPTaskTag
 
 		if opts.MCPAutoExecute && len(gen.ToolCalls) > 0 {
-			return c.ExecuteAndFeedback(ctx, gen, messages, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, opts, options...)
 		} else if !opts.MCPAutoExecute {
 			c.appendToolCallsToContent(gen, opts.MCPTaskTag)
 		}
@@ -181,21 +126,25 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 
 // GenerateContent 生成回复并处理MCP任务
 func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error) {
-	opts := DefaultGenerateOption()
-	for _, opt := range options {
-		opt(opts)
-	}
+	opts := c.prepareOptions(options)
 
 	// 在文本模式下添加MCP提示
 	if opts.MCPWorkMode == TextMode {
-		mcpPrompt := opts.MCPPrompt
+		mcpPrompt := strings.TrimSpace(opts.SystemPromptTemplate)
 		if mcpPrompt == "" {
-			mcpPrompt = c.prompt
+			return nil, errors.New("system prompt template is blank")
 		}
 
 		toolsInfo := c.formatMCPToolsAsJSON(ctx, opts.MCPDisabledTools...)
 
-		systemPrompt := strings.Replace(mcpPrompt, "{tool_descs}", toolsInfo, 1)
+		systemPrompt := mcpPrompt
+		if toolsInfo != "" {
+			if strings.Contains(systemPrompt, "{tool_descs}") {
+				systemPrompt = strings.Replace(systemPrompt, "{tool_descs}", toolsInfo, 1)
+			} else {
+				systemPrompt += "\n\n" + toolsInfo
+			}
+		}
 
 		// 添加系统提示
 		allMessages := make([]Message, len(messages)+1)
@@ -213,10 +162,10 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		gen.MCPWorkMode = opts.MCPWorkMode
 		gen.MCPTaskTag = opts.MCPTaskTag
 		gen.MCPResultTag = opts.MCPResultTag
-		gen.MCPPrompt = mcpPrompt
+		gen.MCPSystemPrompt = systemPrompt
 
 		if opts.MCPAutoExecute {
-			return c.ExecuteAndFeedback(ctx, gen, messages, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, opts, options...)
 		}
 
 		return gen, nil
@@ -235,7 +184,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		gen.MCPTaskTag = opts.MCPTaskTag
 
 		if opts.MCPAutoExecute && len(gen.ToolCalls) > 0 {
-			return c.ExecuteAndFeedback(ctx, gen, messages, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, opts, options...)
 		} else if !opts.MCPAutoExecute {
 			c.appendToolCallsToContent(gen, opts.MCPTaskTag)
 		}
@@ -783,13 +732,12 @@ type MCPToolExecutionResult struct {
 }
 
 // ExecuteAndFeedback 执行工具调用并将结果反馈给LLM生成最终回复
-func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, messages []Message, options ...GenerateOption) (*Generation, error) {
+func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, messages []Message, opts *GenerateOptions, options ...GenerateOption) (*Generation, error) {
 	if !c.hasToolCalls(gen) {
 		return gen, nil
 	}
 
-	opts, originalOptions := c.prepareOptions(options)
-	state := NewExecutionState(gen, messages, opts, originalOptions...)
+	state := NewExecutionState(gen, messages, opts, options...)
 	c.notifyExecutionStart(ctx, state)
 
 	// 执行工具调用循环
@@ -798,12 +746,12 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 	}
 
 	finalGen := &Generation{
-		MCPWorkMode:    state.gen.MCPWorkMode,
-		MCPTaskTag:     state.gen.MCPTaskTag,
-		MCPResultTag:   state.gen.MCPResultTag,
-		MCPPrompt:      state.gen.MCPPrompt,
-		Messages:       state.gen.Messages,
-		GenerationInfo: make(map[string]any),
+		MCPWorkMode:     state.gen.MCPWorkMode,
+		MCPTaskTag:      state.gen.MCPTaskTag,
+		MCPResultTag:    state.gen.MCPResultTag,
+		MCPSystemPrompt: state.gen.MCPSystemPrompt,
+		Messages:        state.gen.Messages,
+		GenerationInfo:  make(map[string]any),
 	}
 
 	c.mergeGenerationInfo(finalGen, state)

@@ -1,7 +1,7 @@
 package llm
 
 // 默认的MCP提示模板
-const defaultMCPPrompt = `You are now an MCP AI assistant with multi-step reasoning and tool execution capabilities.
+const defaultSystemPromptTemplate = `You are now an MCP AI assistant with multi-step reasoning and tool execution capabilities.
 When I give you a task, if you need to call external tools or services, please put your tool call request inside <MCP_HOST_TASK> and </MCP_HOST_TASK> tags.
 Please strictly use the following format:
 <MCP_HOST_TASK>
@@ -32,24 +32,17 @@ IMPORTANT: When you have all the information needed to fully answer the user's q
 Make sure your response is clear, accurate, and strictly follows the format above.`
 
 // 工具执行错误消息模板
-const defaultToolErrorMessageTemplate = `Tool execution error: %s.%s
-Error: %s`
+const defaultToolErrorMessageTemplate = `<%s>
+Tool %s.%s error: %s
+</%s>`
 
 // 工具执行结果消息模板
-const defaultToolResultMessageTemplate = `I have used tool %s.%s to get the following information:
-%s`
-
-// 函数调用模式下的系统提示
-const defaultFunctionCallSystemPrompt = `You are an AI assistant that can use tools in a multi-step process to help users solve complex problems. After receiving tool results, carefully analyze them to determine if additional tools need to be called. Please provide a complete response based on all tool call results.`
-
-// 下一轮分析标识模板
-const defaultNextRoundFlagTemplate = `Continuing Analysis (Round "%d")`
+const defaultToolResultMessageTemplate = `<%s>
+%s
+</%s>`
 
 // 下一轮分析消息模板
-const defaultNextRoundMsgTemplate = "Based on these results, you can use additional tools if needed (up to %d more rounds). Please continue your analysis."
+const defaultNextRoundMsgTemplate = "BASED ON THE ABOVE DATA, ANALYZE IN ENGLISH. IF THE EXISTING DATA IS INSUFFICIENT TO ANSWER MY PREVIOUS QUESTION, PLEASE CONTINUE TO USE TOOLS TO OBTAIN THE MISSING DATA."
 
 // 最终答案消息模板
 const defaultFinalResultMsgTemplate = `Based on these results, use no more tools and give me the final answer.`
-
-// 用户问题模板
-const defaultUserQuestionTemplate = "[User Question]: "
