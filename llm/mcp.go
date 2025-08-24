@@ -79,7 +79,7 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 			}
 		}
 
-		allMessages := make([]Message, len(messages)+1)
+		allMessages := make([]Message, 0, len(messages)+1)
 		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
 		allMessages = append(allMessages, messages...)
 
@@ -147,7 +147,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		}
 
 		// 添加系统提示
-		allMessages := make([]Message, len(messages)+1)
+		allMessages := make([]Message, 0, len(messages)+1)
 
 		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
 
