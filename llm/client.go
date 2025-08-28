@@ -213,9 +213,9 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 	choice := resp.Choices[0]
 	gen := &Generation{
 		Role:             choice.Message.Role,
-		Content:          choice.Message.Content,
+		Content:          strings.TrimSpace(choice.Message.Content),
 		StopReason:       string(choice.FinishReason),
-		ReasoningContent: choice.Message.ReasoningContent,
+		ReasoningContent: strings.TrimSpace(choice.Message.ReasoningContent),
 		Messages: []openai.ChatCompletionMessage{
 			choice.Message,
 		},
@@ -315,8 +315,8 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 			gen.Usage.TotalTokens = resp.Usage.TotalTokens
 		}
 	}
-	gen.Content = contentSb.String()
-	gen.ReasoningContent = reasoningContentSb.String()
+	gen.Content = strings.TrimSpace(contentSb.String())
+	gen.ReasoningContent = strings.TrimSpace(reasoningContentSb.String())
 	gen.Messages = append(gen.Messages, openai.ChatCompletionMessage{
 		Role:             gen.Role,
 		Content:          gen.Content,
