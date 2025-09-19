@@ -211,6 +211,13 @@ func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *Execu
 		return tasks, nil, err
 	}
 
+	moreTasks, err := c.ExtractMCPTasks(state.currentGen.Content, "tools")
+	if err != nil {
+		return tasks, nil, err
+	}
+
+	tasks = append(tasks, moreTasks...)
+
 	if len(tasks) == 0 {
 		return tasks, nil, nil
 	}
