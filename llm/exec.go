@@ -440,7 +440,7 @@ func (c *MCPClient) buildTextModeIntermediateMessages(state *ExecutionState) []M
 			Content: message.Content,
 		})
 	}
-	if !state.opts.DisableTips {
+	if state.opts.EnableTips {
 		allMessages = append(allMessages, *NewUserMessage("", state.opts.NextRoundMsgTemplate))
 	}
 	return allMessages
@@ -462,7 +462,7 @@ func (c *MCPClient) buildTextModeFinalResultMessages(state *ExecutionState) []Me
 	}
 
 	// 添加额外指导
-	if !state.opts.DisableTips {
+	if state.opts.EnableTips {
 		allMessages = append(allMessages, *NewUserMessage("", state.opts.FinalResultMsgTemplate))
 	}
 

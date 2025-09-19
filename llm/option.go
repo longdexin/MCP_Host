@@ -46,7 +46,7 @@ type GenerateOptions struct {
 
 	StateNotifyFunc        StateNotifyFunc `json:"-"` // 状态通知回调
 	EnableDebug            bool            // 启动调试，主要用来打印即将发送的消息
-	DisableTips            bool            // 禁用每轮工具调用后添加提示词
+	EnableTips             bool            // 启用每轮工具调用后添加提示词
 	SystemPromptTemplate   string          // 默认提示
 	ToolErrorMsgTemplate   string          // 工具错误消息模板
 	ToolResultMsgTemplate  string          // 工具结果消息模板
