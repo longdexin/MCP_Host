@@ -676,6 +676,11 @@ func taskRegex(taskTag string) *regexp.Regexp {
 // containsMCPTasks 检查内容中是否包含MCP任务
 func containsMCPTasks(content string, taskTag string) bool {
 	re := taskRegex(taskTag)
+	mathched := re.MatchString(content)
+	if mathched {
+		return mathched
+	}
+	re = taskRegex("tools")
 	return re.MatchString(content)
 }
 
