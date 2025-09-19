@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -367,7 +368,19 @@ func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState)
 	intermediateMessages := c.buildIntermediateMessages(state)
 
 	c.notifyIntermediateGeneration(ctx, state, "start")
-
+	if state.opts.EnableTips {
+		lastIndex := len(intermediateMessages) - 1
+		content := intermediateMessages[lastIndex].Content
+		tag := fmt.Sprintf("<%s>", state.opts.MCPResultTag)
+		if strings.HasPrefix(content, tag) {
+			intermediateMessages[lastIndex].Content = strings.Replace(content, tag, fmt.Sprintf("%s\n%s\n\n", tag, state.opts.NextRoundMsgTemplate), 1)
+		}
+	}
+	if state.opts.EnableDebug {
+		if byteSlice, err := json.MarshalIndent(intermediateMessages, "", "    "); err == nil {
+			_ = os.WriteFile(fmt.Sprintf("%d.json", state.executionRound), byteSlice, 0644)
+		}
+	}
 	nextGen, err := c.llm.GenerateContent(ctx, intermediateMessages, state.originalOptions...)
 	if err != nil {
 		c.notifyIntermediateGenerationError(ctx, state, err)
@@ -390,7 +403,19 @@ func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) e
 	intermediateMessages := c.buildFinalResultMessages(state)
 
 	c.notifyIntermediateGeneration(ctx, state, "start")
-
+	if state.opts.EnableTips {
+		lastIndex := len(intermediateMessages) - 1
+		content := intermediateMessages[lastIndex].Content
+		tag := fmt.Sprintf("<%s>", state.opts.MCPResultTag)
+		if strings.HasPrefix(content, tag) {
+			intermediateMessages[lastIndex].Content = strings.Replace(content, tag, fmt.Sprintf("%s\n%s\n\n", tag, state.opts.NextRoundMsgTemplate), 1)
+		}
+	}
+	if state.opts.EnableDebug {
+		if byteSlice, err := json.MarshalIndent(intermediateMessages, "", "    "); err == nil {
+			_ = os.WriteFile(fmt.Sprintf("%d.json", state.executionRound), byteSlice, 0644)
+		}
+	}
 	nextGen, err := c.llm.GenerateContent(ctx, intermediateMessages, state.originalOptions...)
 	if err != nil {
 		c.notifyIntermediateGenerationError(ctx, state, err)
@@ -429,7 +454,7 @@ func (c *MCPClient) buildFinalResultMessages(state *ExecutionState) []Message {
 
 // buildTextModeIntermediateMessages 构建文本模式中间消息
 func (c *MCPClient) buildTextModeIntermediateMessages(state *ExecutionState) []Message {
-	allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
+	allMessages := make([]Message, 0, 1+len(state.messages)+len(state.currentGen.Messages))
 	systemMsg := NewSystemMessage("", state.currentGen.MCPSystemPrompt)
 	allMessages = append(allMessages, *systemMsg)
 	allMessages = append(allMessages, state.messages...)
@@ -439,9 +464,6 @@ func (c *MCPClient) buildTextModeIntermediateMessages(state *ExecutionState) []M
 			Role:    MessageRole(message.Role),
 			Content: message.Content,
 		})
-	}
-	if state.opts.EnableTips {
-		allMessages = append(allMessages, *NewUserMessage("", state.opts.NextRoundMsgTemplate))
 	}
 	return allMessages
 }

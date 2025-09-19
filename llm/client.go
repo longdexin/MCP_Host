@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -250,11 +249,6 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 
 // handleStreamResponse 处理流式响应
 func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.ChatCompletionRequest, opts *GenerateOptions) (*Generation, error) {
-	if opts.EnableDebug {
-		if byteSlice, err := json.Marshal(req); err == nil {
-			fmt.Println(string(byteSlice))
-		}
-	}
 	stream, err := c.client.CreateChatCompletionStream(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create chat completion stream: %w", err)
