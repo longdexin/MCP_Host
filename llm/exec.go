@@ -129,7 +129,7 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 	// 提取任务
 	c.notifyExtractingTasks(ctx, state, "start")
 
-	tasks, roundTaskResults, err := c.processMCPTasksWithResults(ctx, state, state.currentGen.MCPTaskTag)
+	tasks, roundTaskResults, err := c.processMCPTasksWithResults(ctx, state)
 	if err != nil {
 		return false, err
 	}
@@ -152,10 +152,8 @@ func (c *MCPClient) executeTextModeRound(ctx context.Context, state *ExecutionSt
 			if result, ok := roundTaskResults[i].Result.([]mcp.Content); ok {
 				texts := make([]string, 0, len(result))
 				for j := range result {
-					switch content := result[j].(type) {
-					case mcp.TextContent:
-						texts = append(texts, content.Text)
-					default:
+					if textContent, ok := result[j].(mcp.TextContent); ok {
+						texts = append(texts, textContent.Text)
 					}
 				}
 				content := fmt.Sprintf(state.opts.ToolResultMsgTemplate, state.opts.MCPResultTag, strings.Join(texts, "\n\n"), state.opts.MCPResultTag)

@@ -194,13 +194,10 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 }
 
 // processMCPTasksWithResults 解析并执行任务，返回结果列表
-func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *ExecutionState, taskTag ...string) ([]MCPTask, []TaskResult, error) {
+func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *ExecutionState) ([]MCPTask, []TaskResult, error) {
 	tag := MCP_DEFAULT_TASK_TAG
-	if len(taskTag) > 0 && taskTag[0] != "" {
-		tag = taskTag[0]
-	}
-	if state.currentGen.MCPTaskTag != "" {
-		tag = state.currentGen.MCPTaskTag
+	if state.opts.MCPTaskTag != "" {
+		tag = state.opts.MCPTaskTag
 	}
 	executedTaskTextMap := make(map[string]struct{}, len(state.allTaskResults))
 	for _, taskResult := range state.allTaskResults {
@@ -698,32 +695,27 @@ func extractMCPTasks(content string, taskTag string) ([]MCPTask, error) {
 	matches := re.FindAllStringSubmatch(content, -1)
 
 	for _, match := range matches {
-		if len(match) < 2 {
-			continue
-		}
-
 		toolCallJSON := match[1]
-
 		toolCallJSON = strings.TrimSpace(toolCallJSON)
 
 		// 解析JSON
 		var toolCall QwenToolCall
 		if err := json.Unmarshal([]byte(toolCallJSON), &toolCall); err != nil {
-			continue
+			return tasks, err
 		}
 		names := strings.Split(toolCall.Name, ".")
 		if len(names) != 2 {
-			continue
+			return tasks, fmt.Errorf("invalid tool name %s", toolCall.Name)
 		}
 		task := MCPTask{
-			Server: names[0],
-			Tool:   names[1],
+			Server: strings.TrimSpace(names[0]),
+			Tool:   strings.TrimSpace(names[1]),
 			Args:   toolCall.Arguments,
 			Text:   toolCallJSON,
 		}
 		// 验证任务
 		if task.Server == "" || task.Tool == "" {
-			continue
+			return tasks, fmt.Errorf("invalid tool name %s", toolCall.Name)
 		}
 
 		tasks = append(tasks, task)
