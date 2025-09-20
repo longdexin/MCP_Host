@@ -64,26 +64,17 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 
 	// 在文本模式下添加MCP提示
 	if opts.MCPWorkMode == TextMode {
-		mcpPrompt := strings.TrimSpace(opts.SystemPromptTemplate)
-		if mcpPrompt == "" {
+		systemPrompt := strings.TrimSpace(opts.SystemPromptTemplate)
+		if systemPrompt == "" {
 			return nil, errors.New("system prompt template is blank")
 		}
-		toolsInfo := c.formatMCPToolsAsText(ctx, opts.MCPDisabledTools...)
-
-		systemPrompt := mcpPrompt
-		if toolsInfo != "" {
-			if strings.Contains(systemPrompt, "{tool_descs}") {
-				systemPrompt = strings.Replace(systemPrompt, "{tool_descs}", toolsInfo, 1)
-			} else {
-				systemPrompt += "\n\n" + toolsInfo
-			}
-		}
-
+		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
+		toolsOption := WithTools(tools)
 		allMessages := make([]Message, 0, len(messages)+1)
 		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
 		allMessages = append(allMessages, messages...)
-
-		gen, err := c.llm.GenerateContent(ctx, messages, options...)
+		options = append(options, toolsOption)
+		gen, err := c.llm.GenerateContent(ctx, allMessages, options...)
 		if err != nil {
 			return nil, err
 		}
@@ -96,7 +87,7 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 
 		// 如果启用了自动执行并存在工具调用，则处理工具调用并生成最终回复
 		if opts.MCPAutoExecute {
-			return c.ExecuteAndFeedback(ctx, gen, messages, opts, options...)
+			return c.ExecuteAndFeedback(ctx, gen, allMessages, opts, options...)
 		}
 
 		return gen, nil
@@ -130,21 +121,13 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 
 	// 在文本模式下添加MCP提示
 	if opts.MCPWorkMode == TextMode {
-		mcpPrompt := strings.TrimSpace(opts.SystemPromptTemplate)
-		if mcpPrompt == "" {
+		systemPrompt := strings.TrimSpace(opts.SystemPromptTemplate)
+		if systemPrompt == "" {
 			return nil, errors.New("system prompt template is blank")
 		}
 
-		toolsInfo := c.formatMCPToolsAsJSON(ctx, opts.MCPDisabledTools...)
-
-		systemPrompt := mcpPrompt
-		if toolsInfo != "" {
-			if strings.Contains(systemPrompt, "{tool_descs}") {
-				systemPrompt = strings.Replace(systemPrompt, "{tool_descs}", toolsInfo, 1)
-			} else {
-				systemPrompt += "\n\n" + toolsInfo
-			}
-		}
+		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
+		toolsOption := WithTools(tools)
 
 		// 添加系统提示
 		allMessages := make([]Message, 0, len(messages)+1)
@@ -153,7 +136,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 
 		allMessages = append(allMessages, messages...)
 
-		gen, err := c.llm.GenerateContent(ctx, allMessages, options...)
+		gen, err := c.llm.GenerateContent(ctx, allMessages, append(options, toolsOption)...)
 		if err != nil {
 			return nil, err
 		}
@@ -165,7 +148,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		gen.MCPSystemPrompt = systemPrompt
 
 		if opts.MCPAutoExecute {
-			return c.ExecuteAndFeedback(ctx, gen, messages, opts, options...)
+			return c.ExecuteAndFeedback(ctx, gen, allMessages, opts, options...)
 		}
 
 		return gen, nil
