@@ -440,7 +440,6 @@ func (c *MCPClient) buildTextModeIntermediateMessages(state *ExecutionState) []M
 	allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
 	systemMsg := NewSystemMessage("", state.currentGen.MCPSystemPrompt)
 	allMessages = append(allMessages, *systemMsg)
-	allMessages = append(allMessages, *systemMsg)
 	for _, message := range state.messages {
 		if message.Role != RoleSystem {
 			allMessages = append(allMessages, message)
