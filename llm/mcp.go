@@ -128,15 +128,14 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 
 		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
 		toolsOption := WithTools(tools)
+		options = append(options, toolsOption)
 
 		// 添加系统提示
 		allMessages := make([]Message, 0, len(messages)+1)
-
 		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
-
 		allMessages = append(allMessages, messages...)
 
-		gen, err := c.llm.GenerateContent(ctx, allMessages, append(options, toolsOption)...)
+		gen, err := c.llm.GenerateContent(ctx, allMessages, options...)
 		if err != nil {
 			return nil, err
 		}
