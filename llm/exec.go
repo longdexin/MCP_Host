@@ -366,14 +366,7 @@ func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState)
 	intermediateMessages := c.buildIntermediateMessages(state)
 
 	c.notifyIntermediateGeneration(ctx, state, "start")
-	if state.opts.EnableTips {
-		lastIndex := len(intermediateMessages) - 1
-		content := intermediateMessages[lastIndex].Content
-		tag := fmt.Sprintf("<%s>", state.opts.MCPResultTag)
-		if strings.HasPrefix(content, tag) {
-			intermediateMessages[lastIndex].Content = strings.Replace(content, tag, fmt.Sprintf("%s\n%s\n\n", tag, state.opts.NextRoundMsgTemplate), 1)
-		}
-	}
+
 	if state.opts.EnableDebug {
 		if byteSlice, err := json.MarshalIndent(intermediateMessages, "", "    "); err == nil {
 			_ = os.WriteFile(fmt.Sprintf("%d.json", state.executionRound), byteSlice, 0644)
@@ -401,14 +394,6 @@ func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) e
 	intermediateMessages := c.buildFinalResultMessages(state)
 
 	c.notifyIntermediateGeneration(ctx, state, "start")
-	if state.opts.EnableTips {
-		lastIndex := len(intermediateMessages) - 1
-		content := intermediateMessages[lastIndex].Content
-		tag := fmt.Sprintf("<%s>", state.opts.MCPResultTag)
-		if strings.HasPrefix(content, tag) {
-			intermediateMessages[lastIndex].Content = strings.Replace(content, tag, fmt.Sprintf("%s\n%s\n\n", tag, state.opts.NextRoundMsgTemplate), 1)
-		}
-	}
 	if state.opts.EnableDebug {
 		if byteSlice, err := json.MarshalIndent(intermediateMessages, "", "    "); err == nil {
 			_ = os.WriteFile(fmt.Sprintf("%d.json", state.executionRound), byteSlice, 0644)
@@ -452,16 +437,26 @@ func (c *MCPClient) buildFinalResultMessages(state *ExecutionState) []Message {
 
 // buildTextModeIntermediateMessages 构建文本模式中间消息
 func (c *MCPClient) buildTextModeIntermediateMessages(state *ExecutionState) []Message {
-	allMessages := make([]Message, 0, 1+len(state.messages)+len(state.currentGen.Messages))
+	allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
 	systemMsg := NewSystemMessage("", state.currentGen.MCPSystemPrompt)
 	allMessages = append(allMessages, *systemMsg)
-	allMessages = append(allMessages, state.messages...)
-
+	allMessages = append(allMessages, *systemMsg)
+	for _, message := range state.messages {
+		if message.Role != RoleSystem {
+			allMessages = append(allMessages, message)
+		}
+	}
 	for _, message := range state.gen.Messages {
-		allMessages = append(allMessages, Message{
-			Role:    MessageRole(message.Role),
-			Content: message.Content,
-		})
+		if message.Role != openai.ChatMessageRoleSystem {
+			allMessages = append(allMessages, Message{
+				Role:    MessageRole(message.Role),
+				Content: message.Content,
+			})
+		}
+	}
+	// 添加额外指导
+	if state.opts.EnableTips {
+		allMessages = append(allMessages, *NewUserMessage("", state.opts.NextRoundMsgTemplate))
 	}
 	return allMessages
 }
@@ -472,13 +467,18 @@ func (c *MCPClient) buildTextModeFinalResultMessages(state *ExecutionState) []Me
 	systemMsg := NewSystemMessage("", state.currentGen.MCPSystemPrompt)
 
 	allMessages = append(allMessages, *systemMsg)
-	allMessages = append(allMessages, state.messages...)
-
+	for _, message := range state.messages {
+		if message.Role != RoleSystem {
+			allMessages = append(allMessages, message)
+		}
+	}
 	for _, message := range state.gen.Messages {
-		allMessages = append(allMessages, Message{
-			Role:    MessageRole(message.Role),
-			Content: message.Content,
-		})
+		if message.Role != openai.ChatMessageRoleSystem {
+			allMessages = append(allMessages, Message{
+				Role:    MessageRole(message.Role),
+				Content: message.Content,
+			})
+		}
 	}
 
 	// 添加额外指导
