@@ -68,7 +68,7 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 		if systemPrompt == "" {
 			return nil, errors.New("system prompt template is blank")
 		}
-		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
+		tools := c.createOrderedMCPTools(ctx, opts.MCPTools, opts.MCPDisabledTools)
 		toolsOption := WithTools(tools)
 		allMessages := make([]Message, 0, len(messages)+1)
 		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
@@ -87,13 +87,13 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 
 		// 如果启用了自动执行并存在工具调用，则处理工具调用并生成最终回复
 		if opts.MCPAutoExecute {
-			return c.ExecuteAndFeedback(ctx, gen, allMessages, opts, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, opts, options...)
 		}
 
 		return gen, nil
 	} else {
 		// 函数调用模式
-		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
+		tools := c.createMCPTools(ctx, opts.MCPDisabledTools)
 
 		toolsOption := WithTools(tools)
 		gen, err := c.llm.Generate(ctx, messages, append(options, toolsOption)...)
@@ -126,7 +126,7 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 			return nil, errors.New("system prompt template is blank")
 		}
 
-		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
+		tools := c.createOrderedMCPTools(ctx, opts.MCPTools, opts.MCPDisabledTools)
 		toolsOption := WithTools(tools)
 		options = append(options, toolsOption)
 
@@ -147,13 +147,13 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		gen.MCPSystemPrompt = systemPrompt
 
 		if opts.MCPAutoExecute {
-			return c.ExecuteAndFeedback(ctx, gen, allMessages, opts, options...)
+			return c.ExecuteAndFeedback(ctx, gen, messages, opts, options...)
 		}
 
 		return gen, nil
 	} else {
 		// 函数调用模式
-		tools := c.createMCPTools(ctx, opts.MCPDisabledTools...)
+		tools := c.createMCPTools(ctx, opts.MCPDisabledTools)
 		toolsOption := WithTools(tools)
 
 		gen, err := c.llm.GenerateContent(ctx, messages, append(options, toolsOption)...)
@@ -610,7 +610,7 @@ func (c *MCPClient) processToolCalls(ctx context.Context, gen *Generation) error
 }
 
 // createMCPTools创建MCP工具定义
-func (c *MCPClient) createMCPTools(ctx context.Context, disabledTools ...string) []Tool {
+func (c *MCPClient) createMCPTools(ctx context.Context, disabledTools []string) []Tool {
 	var tools []Tool
 	connections := c.host.GetAllConnections()
 
@@ -633,7 +633,7 @@ func (c *MCPClient) createMCPTools(ctx context.Context, disabledTools ...string)
 
 			funcDef := &FunctionDefinition{
 				Name:        fmt.Sprintf("%s.%s", serverID, tool.Name),
-				Description: fmt.Sprintf("[Server: %s] %s", serverID, tool.Description),
+				Description: fmt.Sprintf("%s", tool.Description),
 				Parameters:  tool.InputSchema,
 			}
 
@@ -645,6 +645,48 @@ func (c *MCPClient) createMCPTools(ctx context.Context, disabledTools ...string)
 	}
 
 	return tools
+}
+
+// createMCPTools创建MCP工具定义
+func (c *MCPClient) createOrderedMCPTools(ctx context.Context, tools []string, disabledTools []string) []Tool {
+	var name2Tool = make(map[string]Tool, len(tools))
+	connections := c.host.GetAllConnections()
+
+	disabledToolsMap := make(map[string]bool)
+	for _, dt := range disabledTools {
+		disabledToolsMap[dt] = true
+	}
+
+	for serverID := range connections {
+		toolsResult, err := c.host.ListTools(ctx, serverID)
+		if err != nil {
+			continue
+		}
+
+		for _, tool := range toolsResult.Tools {
+			toolFullName := fmt.Sprintf("%s.%s", serverID, tool.Name)
+			if disabledToolsMap[toolFullName] {
+				continue
+			}
+
+			funcDef := &FunctionDefinition{
+				Name:        fmt.Sprintf("%s.%s", serverID, tool.Name),
+				Description: fmt.Sprintf("%s", tool.Description),
+				Parameters:  tool.InputSchema,
+			}
+			name2Tool[funcDef.Name] = Tool{
+				Type:     "function",
+				Function: funcDef,
+			}
+		}
+	}
+	var orderedTools = make([]Tool, 0, len(tools))
+	for _, name := range tools {
+		if tool, ok := name2Tool[name]; ok {
+			orderedTools = append(orderedTools, tool)
+		}
+	}
+	return orderedTools
 }
 
 // 标签正则表达式匹配

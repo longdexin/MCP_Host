@@ -52,6 +52,7 @@ type GenerateOptions struct {
 	ToolResultMsgTemplate  string          // 工具结果消息模板
 	NextRoundMsgTemplate   string          // 下一轮分析消息模板
 	FinalResultMsgTemplate string          // 最终答案消息模板
+	MCPTools               []string        // MCP工具列表，用于对工具定义按名称排序
 }
 
 // Tool 模型可以使用的工具
