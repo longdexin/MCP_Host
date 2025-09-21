@@ -649,7 +649,15 @@ func (c *MCPClient) createMCPTools(ctx context.Context, disabledTools []string) 
 
 // createMCPTools创建MCP工具定义
 func (c *MCPClient) createOrderedMCPTools(ctx context.Context, tools []string, disabledTools []string) []Tool {
-	var name2Tool = make(map[string]Tool, len(tools))
+	distinctTools := make([]string, 0, len(tools))
+	toolsMap := make(map[string]struct{}, len(tools))
+	for _, name := range tools {
+		if _, ok := toolsMap[name]; !ok {
+			distinctTools = append(distinctTools, name)
+			toolsMap[name] = struct{}{}
+		}
+	}
+	var name2Tool = make(map[string]Tool, len(distinctTools))
 	connections := c.host.GetAllConnections()
 
 	disabledToolsMap := make(map[string]bool)
@@ -680,8 +688,8 @@ func (c *MCPClient) createOrderedMCPTools(ctx context.Context, tools []string, d
 			}
 		}
 	}
-	var orderedTools = make([]Tool, 0, len(tools))
-	for _, name := range tools {
+	var orderedTools = make([]Tool, 0, len(distinctTools))
+	for _, name := range distinctTools {
 		if tool, ok := name2Tool[name]; ok {
 			orderedTools = append(orderedTools, tool)
 		}
