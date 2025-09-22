@@ -69,6 +69,9 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 			return nil, errors.New("system prompt template is blank")
 		}
 		tools := c.createOrderedMCPTools(ctx, opts.MCPTools, opts.MCPDisabledTools)
+		if len(tools) == 0 {
+			return nil, errors.New("no available tools")
+		}
 		toolsOption := WithTools(tools)
 		allMessages := make([]Message, 0, len(messages)+1)
 		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
@@ -127,6 +130,9 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		}
 
 		tools := c.createOrderedMCPTools(ctx, opts.MCPTools, opts.MCPDisabledTools)
+		if len(tools) == 0 {
+			return nil, errors.New("no available tools")
+		}
 		toolsOption := WithTools(tools)
 		options = append(options, toolsOption)
 
