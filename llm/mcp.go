@@ -72,11 +72,23 @@ func (c *MCPClient) Generate(ctx context.Context, messages []Message, options ..
 		if len(tools) == 0 {
 			return nil, errors.New("no available tools")
 		}
-		toolsOption := WithTools(tools)
+		if opts.EnableToolsInPrompt && strings.Contains(systemPrompt, "{tool_descs}") {
+			toolsList := make([]string, 0, len(tools))
+			for _, tool := range tools {
+				byteSlice, err := json.Marshal(tool)
+				if err != nil {
+					return nil, err
+				}
+				toolsList = append(toolsList, string(byteSlice))
+			}
+			systemPrompt = strings.ReplaceAll(systemPrompt, "{tool_descs}", strings.Join(toolsList, "\n"))
+		} else {
+			toolsOption := WithTools(tools)
+			options = append(options, toolsOption)
+		}
 		allMessages := make([]Message, 0, len(messages)+1)
 		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
 		allMessages = append(allMessages, messages...)
-		options = append(options, toolsOption)
 		gen, err := c.llm.GenerateContent(ctx, allMessages, options...)
 		if err != nil {
 			return nil, err
@@ -133,9 +145,20 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 		if len(tools) == 0 {
 			return nil, errors.New("no available tools")
 		}
-		toolsOption := WithTools(tools)
-		options = append(options, toolsOption)
-
+		if opts.EnableToolsInPrompt && strings.Contains(systemPrompt, "{tool_descs}") {
+			toolsList := make([]string, 0, len(tools))
+			for _, tool := range tools {
+				byteSlice, err := json.Marshal(tool)
+				if err != nil {
+					return nil, err
+				}
+				toolsList = append(toolsList, string(byteSlice))
+			}
+			systemPrompt = strings.ReplaceAll(systemPrompt, "{tool_descs}", strings.Join(toolsList, "\n"))
+		} else {
+			toolsOption := WithTools(tools)
+			options = append(options, toolsOption)
+		}
 		// 添加系统提示
 		allMessages := make([]Message, 0, len(messages)+1)
 		allMessages = append(allMessages, *NewSystemMessage("", systemPrompt))
