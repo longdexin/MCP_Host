@@ -448,8 +448,9 @@ func (c *MCPClient) buildTextModeIntermediateMessages(state *ExecutionState) []M
 	for _, message := range state.gen.Messages {
 		if message.Role != openai.ChatMessageRoleSystem {
 			allMessages = append(allMessages, Message{
-				Role:    MessageRole(message.Role),
-				Content: message.Content,
+				Role:             MessageRole(message.Role),
+				Content:          message.Content,
+				ReasoningContent: message.ReasoningContent,
 			})
 		}
 	}
@@ -474,8 +475,9 @@ func (c *MCPClient) buildTextModeFinalResultMessages(state *ExecutionState) []Me
 	for _, message := range state.gen.Messages {
 		if message.Role != openai.ChatMessageRoleSystem {
 			allMessages = append(allMessages, Message{
-				Role:    MessageRole(message.Role),
-				Content: message.Content,
+				Role:             MessageRole(message.Role),
+				Content:          message.Content,
+				ReasoningContent: message.ReasoningContent,
 			})
 		}
 	}

@@ -14,11 +14,12 @@ type LLM interface {
 }
 
 type Message struct {
-	Role       MessageRole `json:"role"`
-	Name       string      `json:"name,omitempty"`
-	Content    string      `json:"content"`
-	ToolCallId string      `json:"tool_call_id,omitempty"`
-	ToolCalls  []ToolCall  `json:"tool_calls,omitempty"`
+	Role             MessageRole `json:"role"`
+	Name             string      `json:"name,omitempty"`
+	Content          string      `json:"content"`
+	ReasoningContent string      `json:"reasoning_content,omitempty"`
+	ToolCallId       string      `json:"tool_call_id,omitempty"`
+	ToolCalls        []ToolCall  `json:"tool_calls,omitempty"`
 }
 
 type MessageRole string

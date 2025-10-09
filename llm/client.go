@@ -127,11 +127,12 @@ func (c *OpenAIClient) GenerateContent(ctx context.Context, messages []Message, 
 		}
 
 		msgs = append(msgs, openai.ChatCompletionMessage{
-			Role:       string(msg.Role),
-			Name:       msg.Name,
-			Content:    msg.Content,
-			ToolCallID: msg.ToolCallId,
-			ToolCalls:  toolCalls,
+			Role:             string(msg.Role),
+			Name:             msg.Name,
+			Content:          msg.Content,
+			ReasoningContent: msg.ReasoningContent,
+			ToolCallID:       msg.ToolCallId,
+			ToolCalls:        toolCalls,
 		})
 	}
 
