@@ -456,7 +456,7 @@ func (c *MCPClient) buildTextModeIntermediateMessages(state *ExecutionState) []M
 	}
 	// 添加额外指导
 	if state.opts.EnableTips {
-		allMessages = append(allMessages, *NewUserMessage("", state.opts.NextRoundMsgTemplate))
+		allMessages = append(allMessages, *NewSystemMessage("", state.opts.NextRoundMsgTemplate))
 	}
 	return allMessages
 }
