@@ -263,10 +263,6 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 							allMessages = append(allMessages, message)
 						}
 					}
-					allMessages = append(allMessages, Message{
-						Role:    RoleUser,
-						Content: opts.RegenerationMessage,
-					})
 					for _, message := range gen.Messages {
 						if message.Role != openai.ChatMessageRoleSystem {
 							allMessages = append(allMessages, Message{
@@ -276,7 +272,11 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 							})
 						}
 					}
-					nextGen, err := c.GenerateContent(ctx, messages, options...)
+					allMessages = append(allMessages, Message{
+						Role:    RoleUser,
+						Content: opts.RegenerationMessage,
+					})
+					nextGen, err := c.GenerateContent(ctx, allMessages, options...)
 					if err != nil {
 						return nil, err
 					}
