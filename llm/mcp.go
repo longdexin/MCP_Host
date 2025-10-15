@@ -205,6 +205,91 @@ func (c *MCPClient) GenerateContent(ctx context.Context, messages []Message, opt
 	}
 }
 
+func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error) {
+	opts := c.prepareOptions(options)
+	gen, err := c.GenerateContent(ctx, messages, options...)
+	if err != nil {
+		return nil, err
+	}
+	allGenMessages := make([]openai.ChatCompletionMessage, 0, len(gen.Messages))
+	allGenMessages = append(allGenMessages, gen.Messages...)
+	if opts.EnableGuard {
+	REG_LOOP:
+		for range opts.RegenerationLimit {
+			allMessages := make([]Message, 0, 2+len(messages)+len(gen.Messages))
+			systemMsg := NewSystemMessage("", opts.GuardSystemPromptTemplate)
+			allMessages = append(allMessages, *systemMsg)
+			for _, message := range messages {
+				if message.Role != RoleSystem {
+					allMessages = append(allMessages, message)
+				}
+			}
+			for _, message := range gen.Messages {
+				if message.Role != openai.ChatMessageRoleSystem {
+					allMessages = append(allMessages, Message{
+						Role:             MessageRole(message.Role),
+						Content:          message.Content,
+						ReasoningContent: message.ReasoningContent,
+					})
+				}
+			}
+			allMessages = append(allMessages, Message{
+				Role:    RoleUser,
+				Content: opts.GuardMessage,
+			})
+			nextGen, err := c.llm.GenerateContent(ctx, allMessages, options...)
+			if err != nil {
+				return nil, err
+			}
+			genMessages := nextGen.Messages
+			allGenMessages = append(allGenMessages, genMessages...)
+			if size := len(genMessages); size > 0 {
+				lastGenMessage := genMessages[size-1]
+				if lastGenMessage.Role == openai.ChatMessageRoleAssistant {
+					guardResponse := new(GuardResponse)
+					err = json.Unmarshal([]byte(lastGenMessage.Content), guardResponse)
+					if err != nil {
+						return nil, err
+					}
+					if guardResponse.OK {
+						_ = opts.StreamingFunc(ctx, nil, nil, 1)
+						gen.Messages = append(gen.Messages, nextGen.Messages...)
+						break REG_LOOP
+					}
+					_ = opts.StreamingFunc(ctx, nil, nil, 2)
+					allMessages := make([]Message, 0, len(messages)+len(gen.Messages)+1)
+					for _, message := range messages {
+						if message.Role != RoleSystem {
+							allMessages = append(allMessages, message)
+						}
+					}
+					allMessages = append(allMessages, Message{
+						Role:    RoleUser,
+						Content: opts.RegenerationMessage,
+					})
+					for _, message := range gen.Messages {
+						if message.Role != openai.ChatMessageRoleSystem {
+							allMessages = append(allMessages, Message{
+								Role:             MessageRole(message.Role),
+								Content:          message.Content,
+								ReasoningContent: message.ReasoningContent,
+							})
+						}
+					}
+					nextGen, err := c.GenerateContent(ctx, messages, options...)
+					if err != nil {
+						return nil, err
+					}
+					gen = nextGen
+					allGenMessages = append(allGenMessages, gen.Messages...)
+				}
+			}
+		}
+	}
+	gen.Messages = allGenMessages
+	return gen, nil
+}
+
 // processMCPTasksWithResults 解析并执行任务，返回结果列表
 func (c *MCPClient) processMCPTasksWithResults(ctx context.Context, state *ExecutionState) ([]MCPTask, []TaskResult, error) {
 	tag := MCP_DEFAULT_TASK_TAG
@@ -809,71 +894,6 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 	// 执行工具调用循环
 	if err := c.executeToolsLoop(ctx, state); err != nil {
 		return nil, err
-	}
-	originalGenMessages := state.gen.Messages
-	if opts.EnableGuard {
-	REG_LOOP:
-		for range opts.RegenerationLimit {
-			allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
-			systemMsg := NewSystemMessage("", state.opts.GuardSystemPromptTemplate)
-			allMessages = append(allMessages, *systemMsg)
-			for _, message := range state.messages {
-				if message.Role != RoleSystem {
-					allMessages = append(allMessages, message)
-				}
-			}
-			for _, message := range state.gen.Messages {
-				if message.Role != openai.ChatMessageRoleSystem {
-					allMessages = append(allMessages, Message{
-						Role:             MessageRole(message.Role),
-						Content:          message.Content,
-						ReasoningContent: message.ReasoningContent,
-					})
-				}
-			}
-			allMessages = append(allMessages, Message{
-				Role:    RoleUser,
-				Content: state.opts.GuardMessage,
-			})
-			c.notifyIntermediateGeneration(ctx, state, "start")
-			nextGen, err := c.llm.GenerateContent(ctx, allMessages, state.originalOptions...)
-			if err != nil {
-				c.notifyIntermediateGenerationError(ctx, state, err)
-				return nil, err
-			}
-			c.notifyIntermediateGeneration(ctx, state, "complete")
-			genMessages := nextGen.Messages
-			if size := len(genMessages); size > 0 {
-				lastGenMessage := genMessages[size-1]
-				if lastGenMessage.Role == openai.ChatMessageRoleAssistant {
-					guardResponse := new(GuardResponse)
-					err = json.Unmarshal([]byte(lastGenMessage.Content), guardResponse)
-					if err != nil {
-						return nil, err
-					}
-					if guardResponse.OK {
-						_ = opts.StreamingFunc(ctx, nil, nil, 1)
-						nextGen.MCPWorkMode = state.gen.MCPWorkMode
-						nextGen.MCPTaskTag = state.gen.MCPTaskTag
-						nextGen.MCPResultTag = state.gen.MCPResultTag
-						nextGen.MCPSystemPrompt = state.gen.MCPSystemPrompt
-						state.gen.Messages = append(state.gen.Messages, nextGen.Messages...)
-						nextGen.Messages = state.gen.Messages
-						state.currentGen = nextGen
-						break REG_LOOP
-					}
-					_ = opts.StreamingFunc(ctx, nil, nil, 2)
-					// 执行工具调用循环
-					state.gen.Messages = append(originalGenMessages, openai.ChatCompletionMessage{
-						Role:    openai.ChatMessageRoleUser,
-						Content: opts.RegenerationMessage,
-					})
-					if err := c.executeToolsLoop(ctx, state); err != nil {
-						return nil, err
-					}
-				}
-			}
-		}
 	}
 
 	finalGen := &Generation{
