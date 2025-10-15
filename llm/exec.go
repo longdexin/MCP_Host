@@ -364,7 +364,6 @@ func (c *MCPClient) notifyFunctionCallResult(ctx context.Context, state *Executi
 // prepareNextRound 准备下一轮执行
 func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState) error {
 	intermediateMessages := c.buildIntermediateMessages(state)
-
 	c.notifyIntermediateGeneration(ctx, state, "start")
 
 	if state.opts.EnableDebug {

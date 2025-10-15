@@ -810,7 +810,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 	if err := c.executeToolsLoop(ctx, state); err != nil {
 		return nil, err
 	}
-
+	originalGenMessages := state.gen.Messages
 	if opts.EnableGuard {
 	REG_LOOP:
 		for range opts.RegenerationLimit {
@@ -842,16 +842,9 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 				return nil, err
 			}
 			c.notifyIntermediateGeneration(ctx, state, "complete")
-			genMessage := nextGen.Messages
-			nextGen.MCPWorkMode = state.gen.MCPWorkMode
-			nextGen.MCPTaskTag = state.gen.MCPTaskTag
-			nextGen.MCPResultTag = state.gen.MCPResultTag
-			nextGen.MCPSystemPrompt = state.gen.MCPSystemPrompt
-			state.gen.Messages = append(state.gen.Messages, genMessage...)
-			nextGen.Messages = state.gen.Messages
-			state.currentGen = nextGen
-			if size := len(genMessage); size > 0 {
-				lastGenMessage := genMessage[size-1]
+			genMessages := nextGen.Messages
+			if size := len(genMessages); size > 0 {
+				lastGenMessage := genMessages[size-1]
 				if lastGenMessage.Role == openai.ChatMessageRoleAssistant {
 					guardResponse := new(GuardResponse)
 					err = json.Unmarshal([]byte(lastGenMessage.Content), guardResponse)
@@ -860,9 +853,24 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 					}
 					if guardResponse.OK {
 						opts.StreamingFunc(ctx, nil, nil, 1)
+						nextGen.MCPWorkMode = state.gen.MCPWorkMode
+						nextGen.MCPTaskTag = state.gen.MCPTaskTag
+						nextGen.MCPResultTag = state.gen.MCPResultTag
+						nextGen.MCPSystemPrompt = state.gen.MCPSystemPrompt
+						state.gen.Messages = append(state.gen.Messages, nextGen.Messages...)
+						nextGen.Messages = state.gen.Messages
+						state.currentGen = nextGen
 						break REG_LOOP
 					}
 					opts.StreamingFunc(ctx, nil, nil, 2)
+					// 执行工具调用循环
+					state.gen.Messages = append(originalGenMessages, openai.ChatCompletionMessage{
+						Role:    openai.ChatMessageRoleUser,
+						Content: opts.RegenerationMessage,
+					})
+					if err := c.executeToolsLoop(ctx, state); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}

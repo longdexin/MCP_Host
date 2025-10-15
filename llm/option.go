@@ -56,6 +56,7 @@ type GenerateOptions struct {
 	FinalResultMsgTemplate    string          // 最终答案消息模板
 	GuardSystemPromptTemplate string          // Guard使用的系统提示词
 	GuardMessage              string          // Guard消息
+	RegenerationMessage       string          // 重新生成对话发送的消息
 	RegenerationLimit         int             // 最多重新生成的次数
 	MCPTools                  []string        // MCP工具列表，用于对工具定义按名称排序
 }
