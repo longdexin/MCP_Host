@@ -20,7 +20,7 @@ const (
 )
 
 // 流式输出回调函数
-func streamHandler(ctx context.Context, delta *openai.ChatCompletionStreamChoiceDelta, toolResults []llm.MCPToolExecutionResult) error {
+func streamHandler(ctx context.Context, delta *openai.ChatCompletionStreamChoiceDelta, toolResults []llm.MCPToolExecutionResult, flag int) error {
 	fmt.Print(string(delta.Content))
 	return nil
 }

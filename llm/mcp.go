@@ -11,6 +11,7 @@ import (
 
 	"github.com/longdexin/MCP_Host"
 	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/sashabaranov/go-openai"
 )
 
 // MCPTask MCP任务
@@ -808,6 +809,63 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 	// 执行工具调用循环
 	if err := c.executeToolsLoop(ctx, state); err != nil {
 		return nil, err
+	}
+
+	if opts.EnableGuard {
+	REG_LOOP:
+		for range opts.RegenerationLimit {
+			allMessages := make([]Message, 0, 2+len(state.messages)+len(state.currentGen.Messages))
+			systemMsg := NewSystemMessage("", state.opts.GuardSystemPromptTemplate)
+			allMessages = append(allMessages, *systemMsg)
+			for _, message := range state.messages {
+				if message.Role != RoleSystem {
+					allMessages = append(allMessages, message)
+				}
+			}
+			for _, message := range state.gen.Messages {
+				if message.Role != openai.ChatMessageRoleSystem {
+					allMessages = append(allMessages, Message{
+						Role:             MessageRole(message.Role),
+						Content:          message.Content,
+						ReasoningContent: message.ReasoningContent,
+					})
+				}
+			}
+			allMessages = append(allMessages, Message{
+				Role:    RoleUser,
+				Content: state.opts.GuardMessage,
+			})
+			c.notifyIntermediateGeneration(ctx, state, "start")
+			nextGen, err := c.llm.GenerateContent(ctx, allMessages, state.originalOptions...)
+			if err != nil {
+				c.notifyIntermediateGenerationError(ctx, state, err)
+				return nil, err
+			}
+			c.notifyIntermediateGeneration(ctx, state, "complete")
+			genMessage := nextGen.Messages
+			nextGen.MCPWorkMode = state.gen.MCPWorkMode
+			nextGen.MCPTaskTag = state.gen.MCPTaskTag
+			nextGen.MCPResultTag = state.gen.MCPResultTag
+			nextGen.MCPSystemPrompt = state.gen.MCPSystemPrompt
+			state.gen.Messages = append(state.gen.Messages, genMessage...)
+			nextGen.Messages = state.gen.Messages
+			state.currentGen = nextGen
+			if size := len(genMessage); size > 0 {
+				lastGenMessage := genMessage[size-1]
+				if lastGenMessage.Role == openai.ChatMessageRoleAssistant {
+					guardResponse := new(GuardResponse)
+					err = json.Unmarshal([]byte(lastGenMessage.Content), guardResponse)
+					if err != nil {
+						return nil, err
+					}
+					if guardResponse.OK {
+						opts.StreamingFunc(ctx, nil, nil, 1)
+						break REG_LOOP
+					}
+					opts.StreamingFunc(ctx, nil, nil, 2)
+				}
+			}
+		}
 	}
 
 	finalGen := &Generation{

@@ -233,7 +233,7 @@ func (c *MCPClient) streamTextModeResults(ctx context.Context, state *ExecutionS
 		c.notifyToolResult(ctx, state, result)
 	}
 	if len(resultInfos) > 0 {
-		_ = state.opts.StreamingFunc(ctx, nil, resultInfos)
+		_ = state.opts.StreamingFunc(ctx, nil, resultInfos, 0)
 	}
 }
 
@@ -274,7 +274,7 @@ func (c *MCPClient) streamFunctionCallResults(ctx context.Context, state *Execut
 	}
 
 	if len(resultInfos) > 0 {
-		_ = state.opts.StreamingFunc(ctx, nil, resultInfos)
+		_ = state.opts.StreamingFunc(ctx, nil, resultInfos, 0)
 	}
 }
 

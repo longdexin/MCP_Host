@@ -13,14 +13,21 @@ type LLM interface {
 	GenerateContent(ctx context.Context, messages []Message, options ...GenerateOption) (*Generation, error)
 }
 
-type Message struct {
-	Role             MessageRole `json:"role"`
-	Name             string      `json:"name,omitempty"`
-	Content          string      `json:"content"`
-	ReasoningContent string      `json:"reasoning_content,omitempty"`
-	ToolCallId       string      `json:"tool_call_id,omitempty"`
-	ToolCalls        []ToolCall  `json:"tool_calls,omitempty"`
-}
+type (
+	Message struct {
+		Role             MessageRole `json:"role"`
+		Name             string      `json:"name,omitempty"`
+		Content          string      `json:"content"`
+		ReasoningContent string      `json:"reasoning_content,omitempty"`
+		ToolCallId       string      `json:"tool_call_id,omitempty"`
+		ToolCalls        []ToolCall  `json:"tool_calls,omitempty"`
+	}
+	GuardResponse struct {
+		OK          bool   `json:"ok"`
+		Problems    string `json:"problems"`
+		Suggestions string `json:"suggestions"`
+	}
+)
 
 type MessageRole string
 
