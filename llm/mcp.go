@@ -852,7 +852,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 						return nil, err
 					}
 					if guardResponse.OK {
-						opts.StreamingFunc(ctx, nil, nil, 1)
+						_ = opts.StreamingFunc(ctx, nil, nil, 1)
 						nextGen.MCPWorkMode = state.gen.MCPWorkMode
 						nextGen.MCPTaskTag = state.gen.MCPTaskTag
 						nextGen.MCPResultTag = state.gen.MCPResultTag
@@ -862,7 +862,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 						state.currentGen = nextGen
 						break REG_LOOP
 					}
-					opts.StreamingFunc(ctx, nil, nil, 2)
+					_ = opts.StreamingFunc(ctx, nil, nil, 2)
 					// 执行工具调用循环
 					state.gen.Messages = append(originalGenMessages, openai.ChatCompletionMessage{
 						Role:    openai.ChatMessageRoleUser,
