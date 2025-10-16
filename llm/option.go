@@ -58,6 +58,7 @@ type GenerateOptions struct {
 	GuardMessage              string          // Guard消息
 	RegenerationMessage       string          // 重新生成对话发送的消息
 	RegenerationLimit         int             // 最多重新生成的次数
+	RegenerationMode          int             // 重新生成的模式：0 完全重新生成， 1 根据regeneration message重新生成， 2 根据problems、suggestions重新生成, 3 结合problems、suggestions和regeneration message重新生成
 	MCPTools                  []string        // MCP工具列表，用于对工具定义按名称排序
 }
 

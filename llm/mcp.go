@@ -258,24 +258,38 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 					}
 					_ = opts.StreamingFunc(ctx, nil, nil, 2)
 					allMessages := make([]Message, 0, len(messages)+len(gen.Messages)+1)
-					for _, message := range messages {
-						if message.Role != RoleSystem {
-							allMessages = append(allMessages, message)
+					switch opts.RegenerationMode {
+					case 0:
+						allMessages = append(allMessages, messages...)
+					default:
+						for _, message := range messages {
+							if message.Role != RoleSystem {
+								allMessages = append(allMessages, message)
+							}
 						}
-					}
-					for _, message := range gen.Messages {
-						if message.Role != openai.ChatMessageRoleSystem {
-							allMessages = append(allMessages, Message{
-								Role:             MessageRole(message.Role),
-								Content:          message.Content,
-								ReasoningContent: message.ReasoningContent,
-							})
+						for _, message := range gen.Messages {
+							if message.Role != openai.ChatMessageRoleSystem {
+								allMessages = append(allMessages, Message{
+									Role:             MessageRole(message.Role),
+									Content:          message.Content,
+									ReasoningContent: message.ReasoningContent,
+								})
+							}
 						}
+						message := Message{
+							Role:    RoleUser,
+							Content: opts.RegenerationMessage,
+						}
+						switch opts.RegenerationMode {
+						case 2:
+							message.Content = fmt.Sprintf("%s\n%s", guardResponse.Problems, guardResponse.Suggestions)
+						case 3:
+							message.Content = fmt.Sprintf("%s\n%s\n%s", guardResponse.Problems, guardResponse.Suggestions, opts.RegenerationMessage)
+						default:
+						}
+						allMessages = append(allMessages, message)
 					}
-					allMessages = append(allMessages, Message{
-						Role:    RoleUser,
-						Content: opts.RegenerationMessage,
-					})
+
 					nextGen, err := c.GenerateContent(ctx, allMessages, options...)
 					if err != nil {
 						return nil, err
