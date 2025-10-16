@@ -303,7 +303,7 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 		}
 
 		// 调用流式回调
-		if opts.StreamingFunc != nil {
+		if opts.StreamingFunc != nil && !opts.DisableStreamingFunc {
 			if err := opts.StreamingFunc(ctx, &choice.Delta, nil, 0); err != nil {
 				return gen, fmt.Errorf("streaming function returned error: %w", err)
 			}
