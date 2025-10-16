@@ -237,11 +237,15 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 				Role:    RoleUser,
 				Content: opts.GuardMessage,
 			})
-			disableStreamingFunc := opts.DisableStreamingFunc
-			opts.DisableStreamingFunc = opts.DisableGuardStreaming
 			_ = opts.StreamingFunc(ctx, nil, nil, 0)
-			nextGen, err := c.llm.GenerateContent(ctx, allMessages, options...)
-			opts.DisableGuardStreaming = disableStreamingFunc
+			allOptions := make([]GenerateOption, 0, len(options)+1)
+			allOptions = append(allOptions, options...)
+			if opts.DisableGuardStreaming {
+				allOptions = append(allOptions, func(o *GenerateOptions) {
+					o.DisableStreamingFunc = opts.DisableGuardStreaming
+				})
+			}
+			nextGen, err := c.llm.GenerateContent(ctx, allMessages, allOptions...)
 			if err != nil {
 				return nil, err
 			}
