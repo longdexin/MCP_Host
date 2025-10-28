@@ -32,10 +32,13 @@ type (
 type MessageRole string
 
 const (
-	RoleSystem    MessageRole = "system"
-	RoleUser      MessageRole = "user"
-	RoleAssistant MessageRole = "assistant"
-	RoleTool      MessageRole = "tool"
+	RoleSystem              MessageRole = "system"
+	RoleUser                MessageRole = "user"
+	RoleAssistant           MessageRole = "assistant"
+	RoleTool                MessageRole = "tool"
+	GuardMessageName        string      = "Guard"
+	ToolCallMessageName     string      = "ToolCall"
+	ToolResponseMessageName string      = "ToolResponse"
 )
 
 type Generation struct {

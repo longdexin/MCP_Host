@@ -250,6 +250,9 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 				return nil, err
 			}
 			genMessages := nextGen.Messages
+			for i := range genMessages {
+				genMessages[i].Name = GuardMessageName
+			}
 			allGenMessages = append(allGenMessages, genMessages...)
 			if size := len(genMessages); size > 0 {
 				lastGenMessage := genMessages[size-1]
