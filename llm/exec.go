@@ -383,6 +383,7 @@ func (c *MCPClient) prepareNextRound(ctx context.Context, state *ExecutionState)
 	nextGen.MCPResultTag = state.gen.MCPResultTag
 	nextGen.MCPSystemPrompt = state.gen.MCPSystemPrompt
 	state.gen.Messages = append(state.gen.Messages, nextGen.Messages...)
+	state.gen.Usage = nextGen.Usage
 	nextGen.Messages = state.gen.Messages
 	state.currentGen = nextGen
 
@@ -410,6 +411,7 @@ func (c *MCPClient) getFinalResult(ctx context.Context, state *ExecutionState) e
 	nextGen.MCPResultTag = state.gen.MCPResultTag
 	nextGen.MCPSystemPrompt = state.gen.MCPSystemPrompt
 	state.gen.Messages = append(state.gen.Messages, nextGen.Messages...)
+	state.gen.Usage = nextGen.Usage
 	nextGen.Messages = state.gen.Messages
 	state.currentGen = nextGen
 

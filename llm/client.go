@@ -279,6 +279,12 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 		}
 
 		if len(resp.Choices) == 0 {
+			// 更新使用情况
+			if resp.Usage != nil {
+				gen.Usage.PromptTokens = resp.Usage.PromptTokens
+				gen.Usage.CompletionTokens = resp.Usage.CompletionTokens
+				gen.Usage.TotalTokens = resp.Usage.TotalTokens
+			}
 			continue
 		}
 
@@ -307,13 +313,6 @@ func (c *OpenAIClient) handleStreamResponse(ctx context.Context, req openai.Chat
 			if err := opts.StreamingFunc(ctx, &choice.Delta, nil, 0); err != nil {
 				return gen, fmt.Errorf("streaming function returned error: %w", err)
 			}
-		}
-
-		// 更新使用情况
-		if resp.Usage != nil {
-			gen.Usage.PromptTokens = resp.Usage.PromptTokens
-			gen.Usage.CompletionTokens = resp.Usage.CompletionTokens
-			gen.Usage.TotalTokens = resp.Usage.TotalTokens
 		}
 	}
 	gen.Content = strings.TrimSpace(contentSb.String())

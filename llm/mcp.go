@@ -238,11 +238,14 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 				Content: opts.GuardMessage,
 			})
 			_ = opts.StreamingFunc(ctx, nil, nil, 0)
-			allOptions := make([]GenerateOption, 0, len(options)+1)
+			allOptions := make([]GenerateOption, 0, len(options)+2)
 			allOptions = append(allOptions, options...)
 			if opts.DisableGuardStreaming {
 				allOptions = append(allOptions, func(o *GenerateOptions) {
 					o.DisableStreamingFunc = opts.DisableGuardStreaming
+				})
+				allOptions = append(allOptions, func(o *GenerateOptions) {
+					o.MCPTools = []string{}
 				})
 			}
 			nextGen, err := c.llm.GenerateContent(ctx, allMessages, allOptions...)
@@ -927,6 +930,7 @@ func (c *MCPClient) ExecuteAndFeedback(ctx context.Context, gen *Generation, mes
 		MCPResultTag:    state.gen.MCPResultTag,
 		MCPSystemPrompt: state.gen.MCPSystemPrompt,
 		Messages:        state.gen.Messages,
+		Usage:           state.gen.Usage,
 		GenerationInfo:  make(map[string]any),
 	}
 
