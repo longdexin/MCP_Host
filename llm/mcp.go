@@ -257,8 +257,8 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 				genMessages[i].Name = GuardMessageName
 			}
 			allGenMessages = append(allGenMessages, genMessages...)
-			if size := len(genMessages); size > 0 {
-				lastGenMessage := genMessages[size-1]
+			if size := len(allGenMessages); size > 1 {
+				lastGenMessage := allGenMessages[size-1]
 				if lastGenMessage.Role == openai.ChatMessageRoleAssistant {
 					guardResponse := new(GuardResponse)
 					err = json.Unmarshal([]byte(lastGenMessage.Content), guardResponse)
@@ -270,6 +270,7 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 						gen.Messages = append(gen.Messages, nextGen.Messages...)
 						break REG_LOOP
 					}
+					allGenMessages[size-2].Name = "NotOK"
 					_ = opts.StreamingFunc(ctx, nil, nil, 2)
 					allMessages := make([]Message, 0, len(messages)+len(gen.Messages)+1)
 					switch opts.RegenerationMode {
