@@ -248,7 +248,7 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 					o.MCPTools = []string{"url-verify-tool"}
 				})
 			}
-			nextGen, err := c.llm.GenerateContent(ctx, allMessages, allOptions...)
+			nextGen, err := c.GenerateContent(ctx, allMessages, allOptions...)
 			if err != nil {
 				return nil, err
 			}
