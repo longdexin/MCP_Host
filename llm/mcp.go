@@ -247,7 +247,7 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 				o.SystemPromptTemplate = o.GuardSystemPromptTemplate
 			})
 			allOptions = append(allOptions, func(o *GenerateOptions) {
-				o.MCPTools = []string{"url-verify-tool"}
+				o.MCPTools = []string{"mcp-server.url-verify-tool"}
 			})
 			nextGen, err := c.GenerateContent(ctx, allMessages, allOptions...)
 			if err != nil {
