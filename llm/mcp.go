@@ -245,7 +245,7 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 					o.DisableStreamingFunc = opts.DisableGuardStreaming
 				})
 				allOptions = append(allOptions, func(o *GenerateOptions) {
-					o.MCPTools = []string{}
+					o.MCPTools = []string{"url-verify-tool"}
 				})
 			}
 			nextGen, err := c.llm.GenerateContent(ctx, allMessages, allOptions...)
