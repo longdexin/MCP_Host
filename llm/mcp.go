@@ -216,25 +216,16 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 	if opts.EnableGuard {
 	REG_LOOP:
 		for range opts.RegenerationLimit {
-			allMessages := make([]Message, 0, 1+len(messages)+len(gen.Messages))
-			for _, message := range messages {
-				if message.Role != RoleSystem {
-					allMessages = append(allMessages, message)
-				}
+			allMessages := []Message{
+				{
+					Role:    RoleAssistant,
+					Content: gen.Messages[len(gen.Messages)-1].Content,
+				},
+				{
+					Role:    RoleUser,
+					Content: opts.GuardMessage,
+				},
 			}
-			for _, message := range gen.Messages {
-				if message.Role != openai.ChatMessageRoleSystem {
-					allMessages = append(allMessages, Message{
-						Role:             MessageRole(message.Role),
-						Content:          message.Content,
-						ReasoningContent: message.ReasoningContent,
-					})
-				}
-			}
-			allMessages = append(allMessages, Message{
-				Role:    RoleUser,
-				Content: opts.GuardMessage,
-			})
 			_ = opts.StreamingFunc(ctx, nil, nil, 0)
 			allOptions := make([]GenerateOption, 0, len(options)+2)
 			allOptions = append(allOptions, options...)
