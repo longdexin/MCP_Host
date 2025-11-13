@@ -216,9 +216,7 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 	if opts.EnableGuard {
 	REG_LOOP:
 		for range opts.RegenerationLimit {
-			allMessages := make([]Message, 0, 2+len(messages)+len(gen.Messages))
-			systemMsg := NewSystemMessage("", opts.GuardSystemPromptTemplate)
-			allMessages = append(allMessages, *systemMsg)
+			allMessages := make([]Message, 0, 1+len(messages)+len(gen.Messages))
 			for _, message := range messages {
 				if message.Role != RoleSystem {
 					allMessages = append(allMessages, message)
@@ -244,10 +242,13 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 				allOptions = append(allOptions, func(o *GenerateOptions) {
 					o.DisableStreamingFunc = opts.DisableGuardStreaming
 				})
-				allOptions = append(allOptions, func(o *GenerateOptions) {
-					o.MCPTools = []string{"url-verify-tool"}
-				})
 			}
+			allOptions = append(allOptions, func(o *GenerateOptions) {
+				o.SystemPromptTemplate = o.GuardSystemPromptTemplate
+			})
+			allOptions = append(allOptions, func(o *GenerateOptions) {
+				o.MCPTools = []string{"url-verify-tool"}
+			})
 			nextGen, err := c.GenerateContent(ctx, allMessages, allOptions...)
 			if err != nil {
 				return nil, err
