@@ -216,16 +216,27 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 	if opts.EnableGuard {
 	REG_LOOP:
 		for range opts.RegenerationLimit {
-			allMessages := []Message{
-				{
-					Role:    RoleAssistant,
-					Content: gen.Messages[len(gen.Messages)-1].Content,
-				},
-				{
-					Role:    RoleUser,
-					Content: opts.GuardMessage,
-				},
+			allMessages := make([]Message, 0, 2+len(messages)+len(gen.Messages))
+			systemMsg := NewSystemMessage("", opts.GuardSystemPromptTemplate)
+			allMessages = append(allMessages, *systemMsg)
+			for _, message := range messages {
+				if message.Role != RoleSystem {
+					allMessages = append(allMessages, message)
+				}
 			}
+			for _, message := range gen.Messages {
+				if message.Role != openai.ChatMessageRoleSystem {
+					allMessages = append(allMessages, Message{
+						Role:             MessageRole(message.Role),
+						Content:          message.Content,
+						ReasoningContent: message.ReasoningContent,
+					})
+				}
+			}
+			allMessages = append(allMessages, Message{
+				Role:    RoleUser,
+				Content: opts.GuardMessage,
+			})
 			_ = opts.StreamingFunc(ctx, nil, nil, 0)
 			allOptions := make([]GenerateOption, 0, len(options)+2)
 			allOptions = append(allOptions, options...)
@@ -233,14 +244,11 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 				allOptions = append(allOptions, func(o *GenerateOptions) {
 					o.DisableStreamingFunc = opts.DisableGuardStreaming
 				})
+				allOptions = append(allOptions, func(o *GenerateOptions) {
+					o.MCPTools = []string{}
+				})
 			}
-			allOptions = append(allOptions, func(o *GenerateOptions) {
-				o.SystemPromptTemplate = o.GuardSystemPromptTemplate
-			})
-			allOptions = append(allOptions, func(o *GenerateOptions) {
-				o.MCPTools = []string{"mcp-server.url-verify-tool"}
-			})
-			nextGen, err := c.GenerateContent(ctx, allMessages, allOptions...)
+			nextGen, err := c.llm.GenerateContent(ctx, allMessages, allOptions...)
 			if err != nil {
 				return nil, err
 			}
