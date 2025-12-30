@@ -300,6 +300,8 @@ func (c *MCPClient) GenerateContentWithGuard(ctx context.Context, messages []Mes
 							message.Content = fmt.Sprintf("%s\n%s", guardResponse.Problems, guardResponse.Suggestions)
 						case 3:
 							message.Content = fmt.Sprintf("%s\n%s\n%s", guardResponse.Problems, guardResponse.Suggestions, opts.RegenerationMessage)
+						case 4:
+							message.Content = fmt.Sprintf("%s\n%s", guardResponse.Problems, opts.RegenerationMessage)
 						default:
 						}
 						allMessages = append(allMessages, message)
