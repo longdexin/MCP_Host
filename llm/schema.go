@@ -25,7 +25,7 @@ type (
 	GuardResponse struct {
 		OK          bool   `json:"ok"`
 		Problems    string `json:"problems"`
-		Suggestions string `json:"suggestions"`
+		Suggestions string `json:"suggestions,omitempty"`
 	}
 )
 
